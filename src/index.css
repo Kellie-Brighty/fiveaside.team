@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --font-heading: "Space Grotesk", system-ui, sans-serif;
+  --font-body: "Outfit", system-ui, sans-serif;
+}
+
+html,
+body {
+  overflow-x: hidden;
+}
+
+body {
+  @apply bg-dark text-white min-h-screen;
+  font-family: var(--font-body);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.03em;
+}
+
+.sport-gradient {
+  @apply bg-gradient-to-r from-sport-gradient-start to-sport-gradient-end;
+}
+
+.sport-gradient-text {
+  @apply text-transparent bg-clip-text bg-gradient-to-r from-sport-gradient-start to-sport-gradient-end;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary/50 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary;
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md font-medium transition-all duration-200 relative overflow-hidden;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary hover:bg-primary-dark text-white;
+  }
+
+  .btn-secondary {
+    @apply btn bg-secondary hover:bg-secondary-dark text-white;
+  }
+
+  .btn-outline {
+    @apply btn border-2 border-primary text-primary hover:bg-primary hover:text-white;
+  }
+
+  .card {
+    @apply bg-dark-lighter rounded-lg p-4 shadow-lg backdrop-blur-sm relative;
+  }
+
+  /* Modern elements */
+  .glow-effect {
+    @apply relative;
+  }
+
+  .glow-effect::after {
+    content: "";
+    @apply absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300 
+           bg-gradient-to-r from-primary/20 to-secondary/20 blur-xl -z-10;
+  }
+
+  .glow-effect:hover::after {
+    @apply opacity-100;
+  }
+
+  /* Glass morphism */
+  .glass {
+    @apply bg-dark-lighter/80 backdrop-blur-md border border-white/10;
+  }
+
+  /* Mobile optimizations */
+  .mobile-container {
+    @apply px-4 md:px-6 max-w-7xl mx-auto;
+  }
+
+  .mobile-card {
+    @apply card border border-dark-light/50 mx-2 md:mx-0;
+  }
+
+  .mobile-nav {
+    @apply fixed bottom-0 left-0 right-0 bg-dark-lighter border-t border-dark-light
+           flex justify-around items-center py-3 px-2 z-50 md:hidden;
+  }
+
+  .nav-item {
+    @apply flex flex-col items-center text-xs text-gray-400;
+  }
+
+  .nav-item.active {
+    @apply text-primary;
+  }
+
+  .match-card {
+    @apply card mb-4 relative overflow-hidden transition-all duration-300 transform hover:translate-y-[-2px] hover:shadow-xl;
+  }
+
+  .match-card::before {
+    content: "";
+    @apply absolute top-0 left-0 w-0 h-1 sport-gradient transition-all duration-500;
+  }
+
+  .match-card:hover::before {
+    @apply w-full;
+  }
+
+  /* Futuristic team cards */
+  .team-card {
+    @apply card relative border border-dark-light/30 transition-all duration-300;
+  }
+
+  .team-card:hover {
+    @apply border-primary/30 shadow-lg shadow-primary/10;
+  }
+}

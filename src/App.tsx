@@ -1,0 +1,58 @@
+import React from "react";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import "./App.css";
+import Layout from "./components/Layout";
+import HomePage from "./pages/HomePage";
+import TeamsPage from "./pages/TeamsPage";
+import MatchesPage from "./pages/MatchesPage";
+import BettingPage from "./pages/BettingPage";
+import PitchesPage from "./pages/PitchesPage";
+import LoginPage from "./pages/LoginPage";
+import AuthProvider, { useAuth } from "./contexts/AuthContext";
+import RequireAuth from "./components/RequireAuth";
+import ScrollToTop from "./components/ScrollToTop";
+import LoadingScreen from "./components/LoadingScreen";
+import { ToastContainer } from "./components/CustomToast";
+
+const AppContent: React.FC = () => {
+  const { isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  return (
+    <>
+      <ScrollToTop />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<Layout />}>
+          <Route path="/" element={<HomePage />} />
+          <Route path="pitches" element={<PitchesPage />} />
+          <Route element={<RequireAuth />}>
+            <Route path="teams" element={<TeamsPage />} />
+            <Route path="betting" element={<BettingPage />} />
+          </Route>
+          <Route element={<RequireAuth requireReferee />}>
+            <Route path="matches" element={<MatchesPage />} />
+          </Route>
+        </Route>
+      </Routes>
+
+      {/* Toast Container for notifications */}
+      <ToastContainer />
+    </>
+  );
+};
+
+const App: React.FC = () => {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
+  );
+};
+
+export default App;
