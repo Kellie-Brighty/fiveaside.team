@@ -6,53 +6,46 @@ import {
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  type User as FirebaseUser,
 } from "firebase/auth";
-import {
-  doc,
-  getDoc,
-  setDoc,
-  serverTimestamp,
-  type Timestamp,
-} from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
 
 // Default user for referee
-const defaultReferee: User = {
-  id: "referee1",
-  name: "Referee",
-  email: "referee@Fiveaside.team",
-  role: "referee",
-  balance: 0,
-  bets: [],
-  createdAt: new Date(),
-  memberOfPitches: ["pitch1", "pitch2"],
-};
+// const defaultReferee: User = {
+//   id: "referee1",
+//   name: "Referee",
+//   email: "referee@Fiveaside.team",
+//   role: "referee",
+//   balance: 0,
+//   bets: [],
+//   createdAt: new Date(),
+//   memberOfPitches: ["pitch1", "pitch2"],
+// };
 
 // Default user for players/spectators
-const defaultUser: User = {
-  id: "user1",
-  name: "Player",
-  email: "player@Fiveaside.team",
-  role: "player",
-  balance: 1000,
-  bets: [],
-  createdAt: new Date(),
-  memberOfPitches: ["pitch1"],
-};
+// const defaultUser: User = {
+//   id: "user1",
+//   name: "Player",
+//   email: "player@Fiveaside.team",
+//   role: "player",
+//   balance: 1000,
+//   bets: [],
+//   createdAt: new Date(),
+//   memberOfPitches: ["pitch1"],
+// };
 
 // Default user for pitch owners
-const defaultPitchOwner: User = {
-  id: "owner1",
-  name: "Pitch Owner",
-  email: "owner@Fiveaside.team",
-  role: "pitch_owner",
-  balance: 0,
-  bets: [],
-  createdAt: new Date(),
-  memberOfPitches: ["pitch1", "pitch2"],
-  ownedPitches: ["pitch1"],
-};
+// const defaultPitchOwner: User = {
+//   id: "owner1",
+//   name: "Pitch Owner",
+//   email: "owner@Fiveaside.team",
+//   role: "pitch_owner",
+//   balance: 0,
+//   bets: [],
+//   createdAt: new Date(),
+//   memberOfPitches: ["pitch1", "pitch2"],
+//   ownedPitches: ["pitch1"],
+// };
 
 interface AuthContextType {
   currentUser: User | null;

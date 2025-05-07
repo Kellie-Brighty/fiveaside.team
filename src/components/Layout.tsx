@@ -1,6 +1,7 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import LogoutConfirmModal from "./LogoutConfirmModal";
 
 // Icons for mobile navigation
 const HomeIcon = () => (
@@ -110,15 +111,26 @@ const Layout: React.FC = () => {
   const navigate = useNavigate();
   const { currentUser, isAuthenticated, isReferee, isPitchOwner, logout } =
     useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // Check if the current path matches the link path
   const isActive = (path: string) => {
     return location.pathname === path;
   };
 
-  const handleLogout = () => {
+  const handleLogoutClick = () => {
+    setShowLogoutModal(true);
+  };
+
+  const handleConfirmLogout = () => {
     logout();
+    setShowLogoutModal(false);
     navigate("/login");
+    window.toast?.success("You have been successfully logged out");
+  };
+
+  const handleCancelLogout = () => {
+    setShowLogoutModal(false);
   };
 
   // Define navigation items with role-based visibility
@@ -211,22 +223,69 @@ const Layout: React.FC = () => {
                         : "bg-primary"
                     } mr-2`}
                   ></div>
-                  <span className="text-white text-sm">
+                  <span className="text-white text-sm mr-2">
                     {currentUser?.name}
                   </span>
-                  {isReferee && (
-                    <span className="ml-1 px-2 py-0.5 text-xs bg-secondary/20 text-secondary rounded-full">
-                      Referee
-                    </span>
-                  )}
-                  {isPitchOwner && (
-                    <span className="ml-1 px-2 py-0.5 text-xs bg-green-400/20 text-green-400 rounded-full">
-                      Pitch Owner
-                    </span>
-                  )}
+
+                  {/* Creative role tag */}
+                  <div
+                    className={`
+                    relative px-3 py-1 rounded-full text-xs font-medium
+                    ${
+                      isReferee
+                        ? "bg-gradient-to-r from-secondary/20 to-secondary/10 text-pink-300 border border-secondary/30"
+                        : isPitchOwner
+                        ? "bg-gradient-to-r from-green-500/20 to-green-500/10 text-emerald-300 border border-green-500/30"
+                        : "bg-gradient-to-r from-primary/20 to-primary/10 text-violet-300 border border-primary/30"
+                    }
+                    before:absolute before:inset-0 before:rounded-full before:bg-black/5 before:animate-pulse
+                  `}
+                  >
+                    <div className="flex items-center">
+                      {isReferee && (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3.5 w-3.5 mr-1"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path d="M6 3a1 1 0 011-1h.01a1 1 0 010 2H7a1 1 0 01-1-1zm2 3a1 1 0 00-2 0v1a2 2 0 00-2 2v1a2 2 0 002 2h6a2 2 0 002-2v-1a2 2 0 00-2-2V6a1 1 0 10-2 0v1H8V6zm10 8a1 1 0 01-1 1H3a1 1 0 110-2h14a1 1 0 011 1zM5 18a1 1 0 01-1-1v-2a1 1 0 112 0v2a1 1 0 01-1 1zm8-6h2a1 1 0 010 2h-2a1 1 0 010-2z" />
+                          </svg>
+                          Referee
+                        </>
+                      )}
+                      {isPitchOwner && (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3.5 w-3.5 mr-1"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+                          </svg>
+                          Pitch Owner
+                        </>
+                      )}
+                      {!isReferee && !isPitchOwner && (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-3.5 w-3.5 mr-1"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                          >
+                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                          </svg>
+                          Player
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <button
-                  onClick={handleLogout}
+                  onClick={handleLogoutClick}
                   className="text-sm text-white bg-white/10 hover:bg-white/20 px-3 py-1 rounded"
                 >
                   Logout
@@ -285,9 +344,25 @@ const Layout: React.FC = () => {
                   } mr-2`}
                 ></div>
                 <span className="text-white text-xs">{currentUser?.name}</span>
+
+                {/* Mobile role indicator */}
+                <span
+                  className={`
+                  ml-1.5 px-1.5 py-0.5 rounded-sm text-[10px] uppercase tracking-wide font-medium
+                  ${
+                    isReferee
+                      ? "bg-secondary/20 text-pink-300"
+                      : isPitchOwner
+                      ? "bg-green-500/20 text-emerald-300"
+                      : "bg-primary/20 text-violet-300"
+                  }
+                `}
+                >
+                  {isReferee ? "REF" : isPitchOwner ? "OWNER" : "PLAYER"}
+                </span>
               </div>
               <button
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
                 className="ml-2 p-1.5 bg-dark-lighter/60 backdrop-blur-sm rounded-full"
               >
                 <svg
@@ -349,11 +424,19 @@ const Layout: React.FC = () => {
         ))}
       </nav>
 
+      {/* Footer */}
       <footer className="bg-dark-lighter py-4 px-4 text-center hidden md:block">
         <div className="container mx-auto text-center text-gray-400">
           <p>&copy; {new Date().getFullYear()} Fiveaside.team by Trextechies</p>
         </div>
       </footer>
+
+      {/* Logout confirmation modal */}
+      <LogoutConfirmModal
+        isOpen={showLogoutModal}
+        onClose={handleCancelLogout}
+        onConfirm={handleConfirmLogout}
+      />
     </div>
   );
 };

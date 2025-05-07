@@ -107,7 +107,8 @@ const LoadingScreen: React.FC = () => {
         </div>
       </div>
 
-      <style jsx>{`
+      <style>
+        {`
         @keyframes spin {
           0% {
             transform: rotate(0deg);
@@ -138,7 +139,8 @@ const LoadingScreen: React.FC = () => {
             transform: translateX(100%);
           }
         }
-      `}</style>
+      `}
+      </style>
     </div>
   );
 };

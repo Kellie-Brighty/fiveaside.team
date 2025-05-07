@@ -163,7 +163,7 @@ const Toast: React.FC<ToastProps> = ({
   return (
     <div
       className={`
-        fixed top-5 right-5 max-w-sm transform transition-all duration-500 z-50
+        fixed top-5 right-5 w-auto min-w-[300px] max-w-[90vw] md:max-w-[500px] transform transition-all duration-500 z-50
         ${
           isExiting ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"
         }
@@ -173,7 +173,7 @@ const Toast: React.FC<ToastProps> = ({
       <div
         className={`
         relative overflow-hidden p-4 mb-4 rounded-lg shadow-lg border-l-4 
-        backdrop-blur-md dark:bg-dark-lighter/80 
+        backdrop-blur-md dark:bg-dark-lighter/80 w-full
         ${bgColors[type]} ${borderColors[type]}
       `}
       >
@@ -181,7 +181,7 @@ const Toast: React.FC<ToastProps> = ({
 
         <div className="flex items-start">
           <div className="flex-shrink-0">{icons[type]}</div>
-          <div className="ml-3 w-0 flex-1 pt-0.5">
+          <div className="ml-3 flex-1 pt-0.5 break-words">
             <p className="text-sm font-medium text-gray-900 dark:text-white">
               {message}
             </p>
