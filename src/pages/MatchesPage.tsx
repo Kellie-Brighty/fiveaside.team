@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import type { Match, Team, Pitch } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "../firebase";
 
 // Mock data for demonstration
 const mockTeams: Team[] = [
@@ -56,80 +59,11 @@ const mockTeams: Team[] = [
   },
 ];
 
-// Mock pitches data
-const mockPitches: Pitch[] = [
-  {
-    id: "pitch1",
-    name: "Lagos Soccerdome",
-    location: "Lekki Phase 1",
-    address: "123 Admiralty Way",
-    city: "Lagos",
-    state: "Lagos State",
-    country: "Nigeria",
-    coordinates: {
-      latitude: 6.4281,
-      longitude: 3.4219,
-    },
-    description: "Indoor 5-a-side pitch with professional turf",
-    createdAt: new Date(),
-    referees: ["referee1", "referee2"],
-    ownerId: "owner1",
-    customSettings: {
-      matchDuration: 900, // 15 minutes
-      maxGoals: 7,
-      allowDraws: false,
-      maxPlayersPerTeam: 5,
-      pricePerPerson: 3000,
-    },
-    availability: {
-      daysOpen: [
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday",
-      ],
-      openingTime: "09:00",
-      closingTime: "22:00",
-    },
-    pricePerPerson: 3000,
-  },
-  {
-    id: "pitch2",
-    name: "Abuja Sports Arena",
-    location: "Wuse Zone 5",
-    address: "456 Constitution Avenue",
-    city: "Abuja",
-    state: "FCT",
-    country: "Nigeria",
-    coordinates: {
-      latitude: 9.0765,
-      longitude: 7.3986,
-    },
-    description: "Outdoor pitch with floodlights",
-    createdAt: new Date(),
-    referees: ["referee1"],
-    ownerId: "owner2",
-    customSettings: {
-      matchDuration: 1200, // 20 minutes
-      maxGoals: 10,
-      allowDraws: true,
-      maxPlayersPerTeam: 5,
-      pricePerPerson: 2500,
-    },
-    availability: {
-      daysOpen: ["monday", "wednesday", "friday", "saturday", "sunday"],
-      openingTime: "10:00",
-      closingTime: "21:00",
-    },
-    pricePerPerson: 2500,
-  },
-];
-
 const MatchesPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const location = useLocation();
+  const pitchIdFromState = location.state?.pitchId;
+
   const [selectedPitch, setSelectedPitch] = useState<Pitch | null>(null);
   const [currentMatch, setCurrentMatch] = useState<Match | null>(null);
   const [waitingTeams, setWaitingTeams] = useState<Team[]>([]);
@@ -137,30 +71,117 @@ const MatchesPage: React.FC = () => {
   const [isMatchActive, setIsMatchActive] = useState<boolean>(false);
   const [matchHistory, setMatchHistory] = useState<Match[]>([]);
   const [assignedPitches, setAssignedPitches] = useState<Pitch[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     // Scroll to top when component mounts
     window.scrollTo(0, 0);
 
-    // Get pitches that the referee is assigned to
-    if (currentUser && currentUser.role === "referee") {
-      const assigned = mockPitches.filter((pitch) =>
-        pitch.referees.includes(currentUser.id)
-      );
-      setAssignedPitches(assigned);
-    }
-  }, [currentUser]);
+    const fetchRefereeData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+
+        if (!currentUser || currentUser.role !== "referee") {
+          setError("You must be logged in as a referee to view this page");
+          setIsLoading(false);
+          return;
+        }
+
+        // Fetch assigned pitches from Firestore
+        const pitchesQuery = query(
+          collection(db, "pitches"),
+          where("referees", "array-contains", currentUser.id)
+        );
+
+        const querySnapshot = await getDocs(pitchesQuery);
+        const pitches: Pitch[] = [];
+
+        querySnapshot.forEach((doc) => {
+          const pitchData = doc.data();
+          pitches.push({
+            id: doc.id,
+            name: pitchData.name,
+            city: pitchData.city,
+            country: pitchData.country,
+            referees: pitchData.referees || [],
+            ownerId: pitchData.ownerId,
+            createdAt: pitchData.createdAt.toDate(),
+            location: pitchData.location,
+            address: pitchData.address,
+            state: pitchData.state,
+            coordinates: pitchData.coordinates,
+            description: pitchData.description,
+            logo: pitchData.logo,
+            customSettings: pitchData.customSettings,
+            availability: pitchData.availability,
+            pricePerPerson: pitchData.pricePerPerson,
+          });
+        });
+
+        setAssignedPitches(pitches);
+
+        // If pitchId is provided from state, select that pitch
+        if (pitchIdFromState) {
+          const selectedPitchData = pitches.find(
+            (pitch) => pitch.id === pitchIdFromState
+          );
+          if (selectedPitchData) {
+            setSelectedPitch(selectedPitchData);
+          } else if (pitches.length > 0) {
+            // If specified pitch not found but others exist, select the first one
+            setSelectedPitch(pitches[0]);
+          }
+        } else if (pitches.length > 0) {
+          // If no pitchId provided, select the first pitch by default
+          setSelectedPitch(pitches[0]);
+        }
+      } catch (err) {
+        console.error("Error fetching referee data:", err);
+        setError(
+          "Failed to load your assigned pitches. Please try again later."
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRefereeData();
+  }, [currentUser, pitchIdFromState]);
 
   // Load teams for selected pitch
   useEffect(() => {
-    if (selectedPitch) {
-      const teamsForPitch = mockTeams.filter(
-        (team) => team.pitchId === selectedPitch.id
-      );
-      setWaitingTeams(teamsForPitch);
-      setCurrentMatch(null);
-      setMatchHistory([]);
-    }
+    const fetchTeamsForPitch = async () => {
+      if (!selectedPitch) return;
+
+      try {
+        // In a real app, fetch teams from Firestore for the selected pitch
+        // For now, we'll use mock data filtered by pitchId
+        const teamsForPitch = mockTeams.filter(
+          (team) => team.pitchId === selectedPitch.id
+        );
+        setWaitingTeams(teamsForPitch);
+        setCurrentMatch(null);
+        setMatchHistory([]);
+
+        // When we connect to Firebase, we would do something like:
+        // const teamsQuery = query(
+        //   collection(db, "teams"),
+        //   where("pitchId", "==", selectedPitch.id)
+        // );
+        // const querySnapshot = await getDocs(teamsQuery);
+        // const teams: Team[] = [];
+        // querySnapshot.forEach((doc) => {
+        //   teams.push({ id: doc.id, ...doc.data() } as Team);
+        // });
+        // setWaitingTeams(teams);
+      } catch (err) {
+        console.error("Error fetching teams for pitch:", err);
+      }
+    };
+
+    fetchTeamsForPitch();
   }, [selectedPitch]);
 
   // Timer functionality
@@ -332,293 +353,248 @@ const MatchesPage: React.FC = () => {
     setCurrentMatch(updatedMatch);
   };
 
-  // Handle back button click
-  const handleBackToPitches = () => {
-    setSelectedPitch(null);
-    setCurrentMatch(null);
-    setWaitingTeams([]);
-    setMatchHistory([]);
+  const handlePitchSelect = (pitchId: string) => {
+    const pitch = assignedPitches.find((p) => p.id === pitchId);
+    if (pitch) {
+      setSelectedPitch(pitch);
+    }
   };
 
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-4 mt-6 flex items-center justify-center min-h-[50vh]">
+        <div className="animate-pulse text-center">
+          <div className="h-8 w-48 bg-gray-700 rounded mb-4 mx-auto"></div>
+          <div className="h-64 w-full max-w-md bg-gray-800 rounded-lg"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto p-4 mt-6">
+        <div className="bg-red-900/30 border border-red-800 text-red-100 p-4 rounded-lg">
+          <p>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div>
-      <h2 className="text-3xl font-bold sport-gradient-text mb-8">
-        Today's Matches
-      </h2>
+    <div className="container mx-auto p-4 mt-6">
+      <h1 className="text-3xl font-bold text-white mb-6">Today's Matches</h1>
 
-      {!selectedPitch ? (
-        // First step: Show assigned pitches
-        <>
-          <div className="bg-dark-lighter rounded-lg p-6 mb-8">
-            <h3 className="text-xl font-bold text-primary mb-6">
-              Your Assigned Pitches
-            </h3>
-
-            {assignedPitches.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {assignedPitches.map((pitch) => (
-                  <div
-                    key={pitch.id}
-                    className="bg-dark hover:bg-dark-light/40 border border-gray-700 hover:border-primary/50 rounded-lg p-5 cursor-pointer transition-colors"
-                    onClick={() => setSelectedPitch(pitch)}
-                  >
-                    <h4 className="font-bold text-lg mb-1">{pitch.name}</h4>
-                    <p className="text-gray-400 text-sm mb-3">
-                      {pitch.location}
-                    </p>
-
-                    <div className="flex items-center text-sm text-gray-400 mb-3">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        className="h-4 w-4 mr-1"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                      </svg>
-                      {pitch.city}, {pitch.state}
-                    </div>
-
-                    <div className="flex space-x-2 mb-3">
-                      <span className="px-2 py-1 bg-dark-light rounded-md text-xs text-primary flex items-center">
-                        {pitch.customSettings?.matchDuration
-                          ? pitch.customSettings.matchDuration / 60
-                          : 15}{" "}
-                        min matches
-                      </span>
-                      <span className="px-2 py-1 bg-dark-light rounded-md text-xs text-primary flex items-center">
-                        {pitch.customSettings?.maxPlayersPerTeam || 5}-a-side
-                      </span>
-                    </div>
-
-                    <button className="w-full py-2 px-4 bg-primary/20 hover:bg-primary/30 text-primary rounded-lg text-sm font-medium transition-colors">
-                      Manage Matches
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-400 mb-2">
-                  You are not assigned to any pitches yet.
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Contact a pitch owner to be assigned as a referee.
-                </p>
-              </div>
-            )}
-          </div>
-        </>
+      {assignedPitches.length === 0 ? (
+        <div className="bg-gray-800 rounded-lg p-6 text-center">
+          <p className="text-gray-300 mb-4">
+            You don't have any pitches assigned to you yet.
+          </p>
+          <p className="text-gray-400 text-sm">
+            Pitch owners will assign you to their pitches when they need a
+            referee.
+          </p>
+        </div>
       ) : (
-        // Second step: Show match management for selected pitch
         <>
-          <div className="mb-6 flex justify-between items-center">
-            <button
-              onClick={handleBackToPitches}
-              className="flex items-center text-gray-400 hover:text-white"
+          {/* Pitch Selector */}
+          <div className="mb-6">
+            <label
+              htmlFor="pitch-select"
+              className="block text-white mb-2 font-medium"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-              Back to pitches
-            </button>
-
-            <div className="flex items-center">
-              <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
-              <span className="font-medium">{selectedPitch.name}</span>
-              <span className="ml-2 text-sm text-gray-400">
-                {selectedPitch.location}
-              </span>
-            </div>
+              Select Pitch
+            </label>
+            <select
+              id="pitch-select"
+              className="w-full md:w-64 px-4 py-2 rounded-lg bg-gray-700 text-white border border-gray-600 focus:border-blue-500 focus:outline-none"
+              value={selectedPitch?.id || ""}
+              onChange={(e) => handlePitchSelect(e.target.value)}
+            >
+              {assignedPitches.map((pitch) => (
+                <option key={pitch.id} value={pitch.id}>
+                  {pitch.name}
+                </option>
+              ))}
+            </select>
           </div>
 
-          {/* Current Match Section */}
-          <div className="card mb-8 relative overflow-hidden">
-            {isMatchActive && (
-              <div className="absolute top-0 left-0 right-0 h-1 sport-gradient"></div>
-            )}
-
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-bold text-primary">Current Match</h3>
-              <div className="text-xl font-mono bg-dark-light px-3 py-1 rounded">
-                {formatTime(matchTime)}
+          {selectedPitch && (
+            <div className="mb-6">
+              <div className="bg-gray-800 rounded-lg p-6">
+                <h2 className="text-xl font-bold text-white mb-4">
+                  {selectedPitch.name}
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-gray-300">
+                  <p>
+                    <span className="font-semibold">Location:</span>{" "}
+                    {selectedPitch.location || selectedPitch.address},{" "}
+                    {selectedPitch.city}
+                  </p>
+                  {selectedPitch.customSettings && (
+                    <p>
+                      <span className="font-semibold">Match Duration:</span>{" "}
+                      {Math.floor(
+                        selectedPitch.customSettings.matchDuration / 60
+                      )}{" "}
+                      minutes
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
+          )}
 
-            {currentMatch ? (
-              <>
-                <div className="flex justify-between items-center py-4">
-                  <div className="text-center w-1/3">
-                    <h4 className="font-bold mb-2">
-                      {currentMatch.teamA.name}
-                    </h4>
-                    <div className="text-4xl font-bold">
-                      {currentMatch.scoreA}
-                    </div>
-                    {isMatchActive && (
-                      <button
-                        className="mt-4 btn-outline text-sm"
-                        onClick={() => updateScore("A")}
-                      >
-                        + Goal
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="text-center text-xl font-bold">VS</div>
-
-                  <div className="text-center w-1/3">
-                    <h4 className="font-bold mb-2">
-                      {currentMatch.teamB.name}
-                    </h4>
-                    <div className="text-4xl font-bold">
-                      {currentMatch.scoreB}
-                    </div>
-                    {isMatchActive && (
-                      <button
-                        className="mt-4 btn-outline text-sm"
-                        onClick={() => updateScore("B")}
-                      >
-                        + Goal
-                      </button>
-                    )}
+          {/* Match Area */}
+          {currentMatch ? (
+            <div className="bg-gray-800 rounded-lg overflow-hidden shadow-lg mb-6">
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold text-white">
+                    Current Match
+                  </h2>
+                  <div className="px-4 py-2 bg-blue-600 rounded-lg text-white font-bold">
+                    {formatTime(matchTime)}
                   </div>
                 </div>
 
-                <div className="flex justify-center mt-4">
+                <div className="grid grid-cols-3 gap-2 text-center my-8">
+                  <div className="text-white">
+                    <h3 className="text-lg font-bold mb-2">
+                      {currentMatch.teamA.name}
+                    </h3>
+                    <div className="bg-gray-700 rounded-lg p-4 mb-2">
+                      <span className="text-4xl font-bold">
+                        {currentMatch.scoreA}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => updateScore("A")}
+                      className="w-full py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium"
+                      disabled={!isMatchActive}
+                    >
+                      Goal +
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-center text-2xl font-bold text-white">
+                    vs
+                  </div>
+
+                  <div className="text-white">
+                    <h3 className="text-lg font-bold mb-2">
+                      {currentMatch.teamB.name}
+                    </h3>
+                    <div className="bg-gray-700 rounded-lg p-4 mb-2">
+                      <span className="text-4xl font-bold">
+                        {currentMatch.scoreB}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => updateScore("B")}
+                      className="w-full py-2 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium"
+                      disabled={!isMatchActive}
+                    >
+                      Goal +
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-6 flex justify-center">
                   {!isMatchActive ? (
-                    <button className="btn-primary" onClick={startMatch}>
+                    <button
+                      onClick={() => setIsMatchActive(true)}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium"
+                    >
                       Start Match
                     </button>
                   ) : (
-                    <div className="bg-dark-light/40 px-4 py-2 rounded-lg text-sm text-gray-300">
-                      Match will end automatically when time elapses or max
-                      goals are reached
+                    <button
+                      onClick={() => endMatch("time")}
+                      className="px-6 py-3 bg-red-600 hover:bg-red-700 rounded-lg text-white font-medium"
+                    >
+                      End Match
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+              {/* Available Teams */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+                <div className="p-6">
+                  <h2 className="text-xl font-bold text-white mb-4">
+                    Available Teams
+                  </h2>
+                  {waitingTeams.length === 0 ? (
+                    <p className="text-gray-400">No teams available.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {waitingTeams.map((team) => (
+                        <div
+                          key={team.id}
+                          className="bg-gray-700 rounded-lg p-3 flex justify-between items-center"
+                        >
+                          <div>
+                            <h3 className="font-medium text-white">
+                              {team.name}
+                            </h3>
+                            <p className="text-sm text-gray-400">
+                              W: {team.wins} / L: {team.losses} / D:{" "}
+                              {team.draws}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {waitingTeams.length >= 2 && (
+                    <div className="mt-6">
+                      <button
+                        onClick={startMatch}
+                        className="w-full py-3 bg-green-600 hover:bg-green-700 rounded-lg text-white font-medium"
+                      >
+                        Start New Match
+                      </button>
                     </div>
                   )}
                 </div>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-gray-400 mb-4">
-                  No current match in progress
-                </p>
-                {waitingTeams.length >= 2 ? (
-                  <button className="btn-primary" onClick={startMatch}>
-                    Start New Match
-                  </button>
-                ) : (
-                  <p className="text-secondary">
-                    Not enough teams in queue to start a match
-                  </p>
-                )}
               </div>
-            )}
-          </div>
 
-          {/* Waiting Teams Section */}
-          <div className="card mb-8">
-            <h3 className="text-xl font-bold text-primary mb-4">
-              Waiting Queue
-            </h3>
-
-            {waitingTeams.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {waitingTeams.map((team, index) => (
-                  <div
-                    key={team.id}
-                    className="flex items-center p-3 bg-dark-light rounded"
-                  >
-                    <div className="w-8 h-8 flex items-center justify-center bg-primary/20 text-primary rounded-full mr-3">
-                      {index + 1}
+              {/* Match History */}
+              <div className="bg-gray-800 rounded-lg overflow-hidden shadow-lg">
+                <div className="p-6">
+                  <h2 className="text-xl font-bold text-white mb-4">
+                    Today's Match History
+                  </h2>
+                  {matchHistory.length === 0 ? (
+                    <p className="text-gray-400">No matches played today.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {matchHistory.map((match, index) => (
+                        <div key={index} className="bg-gray-700 rounded-lg p-3">
+                          <div className="flex justify-between items-center">
+                            <p className="text-white font-medium">
+                              {match.teamA.name}{" "}
+                              <span className="text-yellow-500 px-2">
+                                {match.scoreA} - {match.scoreB}
+                              </span>{" "}
+                              {match.teamB.name}
+                            </p>
+                          </div>
+                          <p className="mt-1 text-xs text-gray-400">
+                            Winner: {match.winner ? match.winner.name : "Draw"}
+                          </p>
+                        </div>
+                      ))}
                     </div>
-                    <span>{team.name}</span>
-                  </div>
-                ))}
+                  )}
+                </div>
               </div>
-            ) : (
-              <p className="text-gray-400 text-center py-4">
-                No teams in waiting queue
-              </p>
-            )}
-          </div>
-
-          {/* Match History Section */}
-          <div className="card">
-            <h3 className="text-xl font-bold text-primary mb-4">
-              Match History
-            </h3>
-
-            {matchHistory.length > 0 ? (
-              <div className="divide-y divide-dark-light">
-                {matchHistory.map((match) => (
-                  <div key={match.id} className="py-3">
-                    <div className="flex justify-between items-center">
-                      <div className="text-sm text-gray-400">
-                        Match #{match.id}
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {match.startTime?.toLocaleTimeString([], {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center mt-2">
-                      <div
-                        className={`text-center ${
-                          match.winner?.id === match.teamA.id
-                            ? "text-primary font-bold"
-                            : ""
-                        }`}
-                      >
-                        {match.teamA.name}
-                      </div>
-                      <div className="text-center font-bold">
-                        {match.scoreA} - {match.scoreB}
-                      </div>
-                      <div
-                        className={`text-center ${
-                          match.winner?.id === match.teamB.id
-                            ? "text-primary font-bold"
-                            : ""
-                        }`}
-                      >
-                        {match.teamB.name}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-400 text-center py-4">
-                No match history yet
-              </p>
-            )}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>

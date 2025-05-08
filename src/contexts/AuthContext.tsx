@@ -55,6 +55,8 @@ interface AuthContextType {
   userPitches: string[];
   ownedPitches: string[];
   isLoading: boolean;
+  selectedPitchId: string | null;
+  setSelectedPitchId: (pitchId: string | null) => void;
   login: (email: string, password: string) => Promise<void>;
   signup: (
     email: string,
@@ -73,6 +75,8 @@ const AuthContext = createContext<AuthContextType>({
   userPitches: [],
   ownedPitches: [],
   isLoading: true,
+  selectedPitchId: null,
+  setSelectedPitchId: () => {},
   login: async () => {},
   signup: async () => {},
   logout: async () => {},
@@ -88,6 +92,20 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [selectedPitchId, setSelectedPitchId] = useState<string | null>(
+    localStorage.getItem("selectedPitchId")
+  );
+
+  // Update localStorage when selectedPitchId changes
+  const handleSetSelectedPitchId = (pitchId: string | null) => {
+    console.log("Setting selected pitch ID to:", pitchId);
+    if (pitchId) {
+      localStorage.setItem("selectedPitchId", pitchId);
+    } else {
+      localStorage.removeItem("selectedPitchId");
+    }
+    setSelectedPitchId(pitchId);
+  };
 
   const isAuthenticated = Boolean(currentUser);
   const isReferee = Boolean(currentUser?.role === "referee");
@@ -193,6 +211,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userPitches,
     ownedPitches,
     isLoading,
+    selectedPitchId,
+    setSelectedPitchId: handleSetSelectedPitchId,
     login,
     signup,
     logout,

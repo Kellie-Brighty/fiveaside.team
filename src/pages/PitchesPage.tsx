@@ -1,6 +1,17 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  collection,
+  addDoc,
+  getDocs,
+  doc,
+  updateDoc,
+  query,
+  where,
+  arrayUnion,
+} from "firebase/firestore";
+import { db } from "../firebase";
 
 // Define types directly to avoid import issues
 interface PitchSettings {
@@ -53,6 +64,7 @@ interface PlayerPayment {
   isExempted: boolean; // New field to track exemption status
   exemptionReason?: string; // New field to track reason for exemption
   paymentDate?: Date;
+  createdAt?: Date; // Adding timestamp for when the payment record was created
 }
 
 // Mock data for pitches
@@ -194,13 +206,103 @@ const mockPitches: Pitch[] = [
   },
 ];
 
+// Add a simple Map component for location selection
+const LocationPicker: React.FC<{
+  coordinates: { latitude: number; longitude: number } | undefined;
+  onLocationSelected: (lat: number, lng: number) => void;
+  readOnly?: boolean;
+}> = ({ coordinates, onLocationSelected, readOnly = false }) => {
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  useEffect(() => {
+    // Simulate map loading - in a real app, you would load an actual map library
+    // such as Google Maps, Mapbox, Leaflet, etc.
+    const timer = setTimeout(() => {
+      setMapLoaded(true);
+    }, 1000);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!mapLoaded) {
+    return (
+      <div className="h-60 bg-dark rounded-lg flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-green-500"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative h-60 bg-dark rounded-lg overflow-hidden">
+      {/* This would be an actual map in production */}
+      <div className="absolute inset-0 bg-gray-800 flex items-center justify-center">
+        <div className="text-gray-500">Map view (simulated)</div>
+
+        {/* Current location marker */}
+        {coordinates && (
+          <div
+            className="absolute w-6 h-6 transform -translate-x-1/2 -translate-y-1/2"
+            style={{
+              left: `${50 + coordinates.longitude * 0.5}%`,
+              top: `${50 - coordinates.latitude * 0.5}%`,
+            }}
+          >
+            <div className="w-4 h-4 bg-primary rounded-full animate-pulse"></div>
+            <div className="absolute -bottom-5 whitespace-nowrap text-xs text-primary">
+              {coordinates.latitude.toFixed(4)},{" "}
+              {coordinates.longitude.toFixed(4)}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {!readOnly && (
+        <div className="absolute bottom-2 right-2 z-10">
+          <button
+            type="button"
+            onClick={() => {
+              // In a real app, this would be the user's current location from browser
+              if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                  (position) => {
+                    onLocationSelected(
+                      position.coords.latitude,
+                      position.coords.longitude
+                    );
+                  },
+                  (error) => {
+                    console.error("Error getting location:", error);
+                    // Default to a location in Lagos, Nigeria
+                    onLocationSelected(6.455, 3.3841);
+                  }
+                );
+              } else {
+                // Default to a location in Lagos, Nigeria
+                onLocationSelected(6.455, 3.3841);
+              }
+            }}
+            className="bg-primary text-white px-3 py-1.5 rounded-lg text-sm shadow-lg"
+          >
+            Use My Location
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const PitchesPage: React.FC = () => {
-  const { currentUser, isPitchOwner, joinPitch } = useAuth();
-  const [pitches, setPitches] = useState<Pitch[]>(mockPitches);
+  const { currentUser, isPitchOwner, joinPitch, setSelectedPitchId } =
+    useAuth();
+  const [pitches, setPitches] = useState<Pitch[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedPitch, setSelectedPitch] = useState<Pitch | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<Pitch>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [addingReferee, setAddingReferee] = useState(false);
+  const [refereeError, setRefereeError] = useState<string | null>(null);
 
   // Get user location for new pitches
   const [_userLocation, _setUserLocation] = useState<{
@@ -238,10 +340,105 @@ const PitchesPage: React.FC = () => {
     newStatus: boolean;
   } | null>(null);
 
+  const navigate = useNavigate();
+
+  // Fetch pitches from Firestore
   useEffect(() => {
-    // In a real app, fetch pitches from API
-    setPitches(mockPitches);
+    const fetchPitches = async () => {
+      setLoading(true);
+      try {
+        const pitchesCollection = collection(db, "pitches");
+        const pitchesSnapshot = await getDocs(pitchesCollection);
+        const pitchesList = pitchesSnapshot.docs.map((doc) => {
+          const data = doc.data();
+          // Convert Firestore timestamp to Date safely
+          let createdAtDate = new Date();
+          if (data.createdAt) {
+            if (typeof data.createdAt.toDate === "function") {
+              createdAtDate = data.createdAt.toDate();
+            } else if (data.createdAt instanceof Date) {
+              createdAtDate = data.createdAt;
+            } else {
+              createdAtDate = new Date(data.createdAt);
+            }
+          }
+
+          return {
+            id: doc.id,
+            ...data,
+            createdAt: createdAtDate,
+          } as Pitch;
+        });
+        setPitches(pitchesList);
+      } catch (error) {
+        console.error("Error fetching pitches:", error);
+        // Fallback to mock data if fetch fails
+        setPitches(mockPitches);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPitches();
   }, []);
+
+  // Load owned pitches specifically for pitch owners
+  useEffect(() => {
+    const loadOwnedPitches = async () => {
+      if (isPitchOwner && currentUser) {
+        try {
+          const pitchesCollection = collection(db, "pitches");
+          const q = query(
+            pitchesCollection,
+            where("ownerId", "==", currentUser.id)
+          );
+          const querySnapshot = await getDocs(q);
+
+          const ownedPitchesList = querySnapshot.docs.map((doc) => {
+            const data = doc.data();
+
+            // Convert Firestore timestamp to Date safely
+            let createdAtDate = new Date();
+            if (data.createdAt) {
+              if (typeof data.createdAt.toDate === "function") {
+                createdAtDate = data.createdAt.toDate();
+              } else if (data.createdAt instanceof Date) {
+                createdAtDate = data.createdAt;
+              } else {
+                createdAtDate = new Date(data.createdAt);
+              }
+            }
+
+            return {
+              id: doc.id,
+              ...data,
+              createdAt: createdAtDate,
+            } as Pitch;
+          });
+
+          // If we have owned pitches from Firebase, update our pitches state to include them
+          if (ownedPitchesList.length > 0) {
+            setPitches((currentPitches) => {
+              const pitchIds = new Set(currentPitches.map((p) => p.id));
+              const newPitches = [...currentPitches];
+
+              ownedPitchesList.forEach((pitch) => {
+                if (!pitchIds.has(pitch.id)) {
+                  newPitches.push(pitch);
+                }
+              });
+
+              return newPitches;
+            });
+          }
+        } catch (error) {
+          console.error("Error loading owned pitches:", error);
+        }
+      }
+    };
+
+    loadOwnedPitches();
+  }, [isPitchOwner, currentUser]);
 
   useEffect(() => {
     // Scroll to top when component mounts
@@ -274,6 +471,14 @@ const PitchesPage: React.FC = () => {
   const handleSelectPitch = (pitch: Pitch) => {
     setSelectedPitch(pitch);
     setFormData(pitch);
+    // Store the selected pitch ID in the context for use in other pages
+    setSelectedPitchId(pitch.id);
+
+    // Check if this pitch is owned by the current user but not yet in their ownedPitches array
+    if (isPitchOwner && currentUser && pitch.ownerId === currentUser.id) {
+      // In a real app, we would update the user's record in Firestore
+      console.log("User is the owner of this pitch");
+    }
 
     // In a real app, fetch referee details from API
     setFormReferees(
@@ -310,7 +515,7 @@ const PitchesPage: React.FC = () => {
         matchDuration: 900,
         maxGoals: 7,
         allowDraws: false,
-        maxPlayersPerTeam: 5, // Default to 5 players (five-a-side)
+        maxPlayersPerTeam: 5, // Always set to 5 for five-a-side
       },
       availability: {
         daysOpen: [
@@ -353,6 +558,10 @@ const PitchesPage: React.FC = () => {
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
   ) => {
     const { name, value, type } = e.target as HTMLInputElement;
+
+    // No longer skip changes to maxPlayersPerTeam - allow selection from 3-5
+    // if (name === "maxPlayersPerTeam") return;
+
     const processedValue =
       type === "checkbox"
         ? (e.target as HTMLInputElement).checked
@@ -380,35 +589,106 @@ const PitchesPage: React.FC = () => {
     });
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Add function to update user's owned pitches
+  const updateUserOwnedPitches = async (pitchId: string) => {
+    if (!currentUser) return;
+
+    try {
+      const userRef = doc(db, "users", currentUser.id);
+
+      // Add the pitch ID to the user's ownedPitches array
+      await updateDoc(userRef, {
+        ownedPitches: arrayUnion(pitchId),
+      });
+
+      console.log("User's owned pitches updated successfully");
+    } catch (error) {
+      console.error("Error updating user's owned pitches:", error);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // In a real app, send to API
-    if (selectedPitch) {
-      // Update existing pitch
-      setPitches(
-        pitches.map((p) =>
-          p.id === selectedPitch.id ? { ...p, ...formData } : p
-        )
-      );
-    } else {
-      // Create new pitch
-      const newPitch: Pitch = {
-        id: `pitch${Date.now()}`,
-        createdAt: new Date(),
-        referees: [],
-        ...(formData as any),
-      };
-      setPitches([...pitches, newPitch]);
-    }
+    setSubmitting(true);
 
-    setIsEditing(false);
-    setSelectedPitch(null);
+    try {
+      if (selectedPitch) {
+        // Update existing pitch
+        const pitchRef = doc(db, "pitches", selectedPitch.id);
+        await updateDoc(pitchRef, {
+          ...formData,
+          updatedAt: new Date(),
+        });
+
+        // Update local state
+        setPitches(
+          pitches.map((p) =>
+            p.id === selectedPitch.id ? ({ ...p, ...formData } as Pitch) : p
+          )
+        );
+      } else {
+        // Create new pitch
+        const newPitchData = {
+          ...formData,
+          createdAt: new Date(),
+          ownerId: currentUser?.id,
+          referees: formData.referees || [],
+        };
+
+        const docRef = await addDoc(collection(db, "pitches"), newPitchData);
+
+        // Add to local state
+        const newPitch: Pitch = {
+          id: docRef.id,
+          ...(newPitchData as any),
+        };
+        setPitches([...pitches, newPitch]);
+
+        // Update user's ownedPitches array
+        await updateUserOwnedPitches(docRef.id);
+      }
+
+      setIsEditing(false);
+      setSelectedPitch(null);
+    } catch (error) {
+      console.error("Error saving pitch:", error);
+      alert("Failed to save pitch. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleJoinPitch = (pitchId: string) => {
+    console.log("handleJoinPitch called with pitchId:", pitchId);
+
+    // Find the pitch object to get its name
+    const selectedPitchObj = pitches.find((p) => p.id === pitchId);
+
+    // Set the selected pitch ID in the auth context
+    setSelectedPitchId(pitchId);
+
+    // Also set in localStorage directly as a backup
+    localStorage.setItem("selectedPitchId", pitchId);
+
+    // Store pitch name and location for use in other pages
+    if (selectedPitchObj) {
+      const pitchData = {
+        id: pitchId,
+        name: selectedPitchObj.name,
+        location: selectedPitchObj.location || "",
+      };
+      localStorage.setItem("selectedPitchData", JSON.stringify(pitchData));
+      console.log("Stored pitch data in localStorage:", pitchData);
+    }
+
+    console.log(
+      "After setting - localStorage:",
+      localStorage.getItem("selectedPitchId")
+    );
+
+    // Call the joinPitch function to update the user's joined pitches
     joinPitch(pitchId);
-    // In a real app, you would also make an API call to join the pitch
   };
 
   // Calculate distance between two coordinates in kilometers
@@ -429,6 +709,97 @@ const PitchesPage: React.FC = () => {
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+
+  // Search for referee by email
+  const searchRefereeByEmail = async (email: string) => {
+    try {
+      // In a real app, we would query the 'users' collection where role === 'referee'
+      const usersCollection = collection(db, "users");
+      const q = query(
+        usersCollection,
+        where("email", "==", email),
+        where("role", "==", "referee")
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        const refereeDoc = querySnapshot.docs[0];
+        const refereeData = refereeDoc.data();
+        return {
+          id: refereeDoc.id,
+          name: refereeData.name || refereeData.email.split("@")[0],
+          email: refereeData.email,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Error searching for referee:", error);
+      return null;
+    }
+  };
+
+  // Add referee with Firebase integration and proper error handling
+  const handleAddReferee = async () => {
+    if (!refereeEmail || !refereeName) return;
+
+    setAddingReferee(true);
+    setRefereeError(null);
+
+    try {
+      // First, check if the email belongs to a registered referee
+      const existingReferee = await searchRefereeByEmail(refereeEmail);
+
+      let newReferee;
+      if (existingReferee) {
+        newReferee = existingReferee;
+      } else {
+        // If not found, create a temporary ID and show a notice
+        newReferee = {
+          id: `referee-${Date.now()}`,
+          name: refereeName,
+          email: refereeEmail,
+        };
+
+        // Show a notice that this referee isn't registered yet
+        setRefereeError(
+          "This referee is not registered in the system. We'll send them an invitation email."
+        );
+      }
+
+      // Check if this referee is already added
+      if (formReferees.some((ref) => ref.email === refereeEmail)) {
+        setRefereeError("This referee has already been added to the pitch.");
+        return;
+      }
+
+      setFormReferees([...formReferees, newReferee]);
+
+      // Update form data with new referee ID
+      setFormData((prev) => ({
+        ...prev,
+        referees: [...(prev.referees || []), newReferee.id],
+      }));
+
+      // Clear inputs
+      setRefereeEmail("");
+      setRefereeName("");
+    } catch (error) {
+      console.error("Error adding referee:", error);
+      setRefereeError("Failed to add referee. Please try again.");
+    } finally {
+      setAddingReferee(false);
+    }
+  };
+
+  const handleRemoveReferee = (refereeId: string) => {
+    setFormReferees(formReferees.filter((referee) => referee.id !== refereeId));
+
+    // Update form data by removing referee ID
+    setFormData((prev) => ({
+      ...prev,
+      referees: (prev.referees || []).filter((id) => id !== refereeId),
+    }));
   };
 
   // Filter pitches based on search query and location filters
@@ -473,13 +844,17 @@ const PitchesPage: React.FC = () => {
     return filtered;
   };
 
-  // Separate owned pitches
-  const myOwnedPitches =
-    isPitchOwner && currentUser?.ownedPitches
-      ? getFilteredPitches().filter((pitch) =>
-          currentUser.ownedPitches?.includes(pitch.id)
-        )
-      : [];
+  // Get pitches owned by the current user
+  const myOwnedPitches = useMemo(() => {
+    if (!isPitchOwner || !currentUser) return [];
+
+    return pitches.filter(
+      (pitch) =>
+        // Either in the user's ownedPitches array or has matching ownerId
+        currentUser.ownedPitches?.includes(pitch.id) ||
+        pitch.ownerId === currentUser.id
+    );
+  }, [pitches, currentUser, isPitchOwner]);
 
   // Non-owned pitches
   // const otherPitches =
@@ -489,82 +864,87 @@ const PitchesPage: React.FC = () => {
   //       )
   //     : getFilteredPitches();
 
-  // Add handleAddReferee function
-  const handleAddReferee = () => {
-    if (refereeEmail && refereeName) {
-      const newReferee = {
-        id: `referee-${Date.now()}`, // Temporary ID
-        name: refereeName,
-        email: refereeEmail,
-      };
-
-      setFormReferees([...formReferees, newReferee]);
-
-      // Update form data with new referee ID
-      setFormData((prev) => ({
-        ...prev,
-        referees: [...(prev.referees || []), newReferee.id],
-      }));
-
-      // Clear inputs
-      setRefereeEmail("");
-      setRefereeName("");
-    }
-  };
-
-  const handleRemoveReferee = (refereeId: string) => {
-    setFormReferees(formReferees.filter((referee) => referee.id !== refereeId));
-
-    // Update form data by removing referee ID
-    setFormData((prev) => ({
-      ...prev,
-      referees: (prev.referees || []).filter((id) => id !== refereeId),
-    }));
-  };
-
-  // Add mock data for demonstration
-  const generateMockPlayerPayments = (_pitchId: string) => {
-    // This would normally come from an API call based on teams assigned to the pitch
-    const mockTeamNames = [
-      "Lightning Warriors",
-      "Royal Eagles",
-      "Urban Kickers",
-      "Silver Hawks",
-    ];
-    const mockPlayerPayments: PlayerPayment[] = [];
-
-    for (let teamIndex = 0; teamIndex < 4; teamIndex++) {
-      const teamId = `team-${teamIndex + 1}`;
-      const teamName = mockTeamNames[teamIndex];
-
-      // Generate 5 players per team (5-a-side)
-      for (let playerIndex = 0; playerIndex < 5; playerIndex++) {
-        const playerId = `player-${teamIndex * 5 + playerIndex + 1}`;
-        const playerName = `Player ${teamIndex * 5 + playerIndex + 1}`;
-
-        mockPlayerPayments.push({
-          id: `payment-${teamIndex * 5 + playerIndex + 1}`,
-          playerId,
-          playerName,
-          teamId,
-          teamName,
-          amount: 3000, // Fixed price per person (3000 Naira)
-          isPaid: Math.random() > 0.5, // Randomly set some as paid
-          isExempted: Math.random() > 0.5, // Randomly set some as exempted
-          exemptionReason: Math.random() > 0.5 ? "Medical Reason" : undefined,
-          paymentDate: Math.random() > 0.5 ? new Date() : undefined,
-        });
-      }
-    }
-
-    return mockPlayerPayments;
-  };
-
   // Add function to load player payments based on pitch and date
-  const loadPlayerPayments = (pitchId: string, _date: string) => {
-    // In a real app, this would be an API call
-    // For now, we'll use our mock data generator
-    setPlayersInPitch(generateMockPlayerPayments(pitchId));
+  const loadPlayerPayments = (pitchId: string, date: string) => {
+    const fetchPlayersFromTeams = async () => {
+      try {
+        setPlayersInPitch([]); // Clear existing data
+
+        // Fetch teams for this pitch and date from Firebase
+        const teamsRef = collection(db, "teams");
+        const q = query(
+          teamsRef,
+          where("pitchId", "==", pitchId),
+          where("createdForDate", "==", date)
+        );
+
+        const teamsSnapshot = await getDocs(q);
+
+        if (!teamsSnapshot.empty) {
+          // We found teams for this pitch and date
+          const realPlayerPayments: PlayerPayment[] = [];
+
+          // Loop through each team
+          teamsSnapshot.docs.forEach((teamDoc) => {
+            const teamData = teamDoc.data();
+            const teamId = teamDoc.id;
+            const teamName = teamData.name || "Unknown Team";
+
+            // Process each player in the team
+            if (teamData.players && Array.isArray(teamData.players)) {
+              teamData.players.forEach((player: any) => {
+                // Get pricing from pitch settings
+                const pitchPrice = selectedPitch?.pricePerPerson || 3000;
+
+                // Check if we already have a payment record for this player
+                const existingPaymentIndex = playersInPitch.findIndex(
+                  (p) => p.playerId === player.id && p.teamId === teamId
+                );
+
+                // Check if this player is the pitch owner
+                const isPlayerPitchOwner = Boolean(
+                  currentUser &&
+                    currentUser.id === player.id &&
+                    selectedPitch &&
+                    selectedPitch.ownerId === currentUser.id
+                );
+
+                if (existingPaymentIndex >= 0) {
+                  // Use existing payment status if available
+                  realPlayerPayments.push(playersInPitch[existingPaymentIndex]);
+                } else {
+                  // Create new payment record for this player
+                  realPlayerPayments.push({
+                    id: `payment-${Date.now()}-${Math.random()
+                      .toString(36)
+                      .substr(2, 9)}`,
+                    playerId: player.id,
+                    playerName: player.name,
+                    teamId: teamId,
+                    teamName: teamName,
+                    amount: pitchPrice,
+                    isPaid: false, // Default to unpaid
+                    // Automatically exempt the pitch owner from payment
+                    isExempted: isPlayerPitchOwner,
+                    exemptionReason: isPlayerPitchOwner
+                      ? "Pitch Owner"
+                      : undefined,
+                    createdAt: new Date(), // Adding timestamp for when the payment record was created
+                  });
+                }
+              });
+            }
+          });
+
+          setPlayersInPitch(realPlayerPayments);
+        }
+      } catch (error) {
+        console.error("Error fetching players for payment tracking:", error);
+        setPlayersInPitch([]); // Set empty array instead of mock data
+      }
+    };
+
+    fetchPlayersFromTeams();
   };
 
   // Show confirmation for toggling payment status
@@ -838,411 +1218,163 @@ const PitchesPage: React.FC = () => {
     );
   };
 
+  // Add a handler for location selection
+  const handleLocationSelected = (latitude: number, longitude: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      coordinates: {
+        latitude,
+        longitude,
+      },
+    }));
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
-      {isPitchOwner ? (
-        <div className="mb-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
-            <h1 className="text-2xl sm:text-3xl font-bold text-green-500 mb-3 sm:mb-0">
-              Manage Your Pitches
-            </h1>
-            <button
-              onClick={handleCreatePitch}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center w-full sm:w-auto justify-center sm:justify-start"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 mr-2"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              Register New Pitch
-            </button>
-          </div>
-
-          {myOwnedPitches.length > 0 ? (
-            <div className="bg-dark-light/20 rounded-lg p-4 sm:p-6 mb-8">
-              <h2 className="text-xl font-bold text-white mb-4">
-                Your Pitches
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {myOwnedPitches.map((pitch) => (
-                  <div
-                    key={pitch.id}
-                    className={`bg-dark-light/40 border ${
-                      selectedPitch?.id === pitch.id
-                        ? "border-green-500"
-                        : "border-green-500/30"
-                    } rounded-lg overflow-hidden cursor-pointer hover:bg-dark-light/60 transition-all`}
-                    onClick={() => handleSelectPitch(pitch)}
-                  >
-                    <div className="p-4">
-                      <h3 className="font-bold text-lg text-white">
-                        {pitch.name}
-                      </h3>
-                      <p className="text-gray-400 text-sm">{pitch.location}</p>
-                      <div className="mt-2 flex items-center text-xs text-green-400">
-                        <svg
-                          className="w-4 h-4 mr-1"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                          <path
-                            fillRule="evenodd"
-                            d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        Owner
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            !isEditing && (
-              <div className="bg-dark-light/20 rounded-lg p-4 sm:p-6 mb-8 text-center">
-                <h2 className="text-xl font-bold text-white mb-2">
-                  No Pitches Registered Yet
-                </h2>
-                <p className="text-gray-400 mb-4">
-                  Register your first pitch to start hosting matches
-                </p>
+      {loading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+        </div>
+      ) : (
+        <>
+          {isPitchOwner ? (
+            <div className="mb-8">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6">
+                <h1 className="text-2xl sm:text-3xl font-bold text-green-500 mb-3 sm:mb-0">
+                  Manage Your Pitches
+                </h1>
                 <button
                   onClick={handleCreatePitch}
-                  className="bg-gradient-to-r from-green-600 to-green-500 text-white px-6 py-3 rounded-md"
-                >
-                  Register Your First Pitch
-                </button>
-              </div>
-            )
-          )}
-
-          {/* Display selected pitch details inline */}
-          {selectedPitch && !isEditing && (
-            <div className="bg-dark-lighter rounded-lg p-4 sm:p-6 mb-8">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-bold mb-1">
-                    {selectedPitch.name}
-                  </h2>
-                  <p className="text-gray-400">{selectedPitch.location}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedPitch(null)}
-                  className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
+                  className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md flex items-center w-full sm:w-auto justify-center sm:justify-start"
                 >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                    className="h-5 w-5 mr-2"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
                   >
                     <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
+                      fillRule="evenodd"
+                      d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z"
+                      clipRule="evenodd"
                     />
                   </svg>
+                  Register New Pitch
                 </button>
               </div>
 
-              <p className="text-gray-300 mb-6">{selectedPitch.description}</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-dark p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2 text-gray-300">
-                    Match Settings
-                  </h3>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Match Duration:</span>
-                      <span>
-                        {selectedPitch.customSettings?.matchDuration
-                          ? selectedPitch.customSettings.matchDuration / 60
-                          : 15}{" "}
-                        minutes
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Max Goals:</span>
-                      <span>
-                        {selectedPitch.customSettings?.maxGoals || 7} goals
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Draws Allowed:</span>
-                      <span>
-                        {selectedPitch.customSettings?.allowDraws
-                          ? "Yes"
-                          : "No"}
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Team Size:</span>
-                      <span>
-                        {selectedPitch.customSettings?.maxPlayersPerTeam || 5}
-                        -a-side
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Price:</span>
-                      <span className="font-semibold text-primary">
-                        ₦
-                        {selectedPitch.pricePerPerson?.toLocaleString() ||
-                          "2,000"}
-                        /person
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-                <div className="bg-dark p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2 text-gray-300">
-                    Pitch Info
-                  </h3>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Surface:</span>
-                      <span>Artificial Turf</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Indoor/Outdoor:</span>
-                      <span>
-                        {selectedPitch.name.includes("Indoor")
-                          ? "Indoor"
-                          : "Outdoor"}
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Changing Rooms:</span>
-                      <span>Available</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              {/* Referees Section */}
-              <div className="bg-dark p-4 rounded-lg mb-6">
-                <h3 className="font-semibold mb-2 text-gray-300">Referees</h3>
-                {selectedPitch.referees && selectedPitch.referees.length > 0 ? (
-                  <ul className="space-y-1 text-sm">
-                    {selectedPitch.referees.map((refereeId) => (
-                      <li
-                        key={refereeId}
-                        className="flex items-center text-gray-300"
+              {myOwnedPitches.length > 0 ? (
+                <div className="bg-dark-light/20 rounded-lg p-4 sm:p-6 mb-8">
+                  <h2 className="text-xl font-bold text-white mb-4">
+                    Your Pitches
+                  </h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {myOwnedPitches.map((pitch) => (
+                      <div
+                        key={pitch.id}
+                        className={`bg-dark-light/40 border ${
+                          selectedPitch?.id === pitch.id
+                            ? "border-green-500"
+                            : "border-green-500/30"
+                        } rounded-lg overflow-hidden cursor-pointer hover:bg-dark-light/60 transition-all`}
+                        onClick={() => handleSelectPitch(pitch)}
                       >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-2 text-green-500"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        Referee (ID: {refereeId.substring(0, 8)})
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-gray-400">
-                    No referees assigned yet
-                  </p>
-                )}
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
-                {isPitchOwner &&
-                currentUser?.ownedPitches?.includes(selectedPitch.id) ? (
-                  <button
-                    onClick={handleEditPitch}
-                    className="btn-primary flex-1 py-2.5"
-                  >
-                    Edit Pitch
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => {
-                        handleJoinPitch(selectedPitch.id);
-                        setSelectedPitch(null);
-                      }}
-                      className="bg-dark hover:bg-dark-light text-white text-center py-2.5 rounded-lg flex-1"
-                    >
-                      Join This Pitch
-                    </button>
-                    <Link
-                      to="/teams"
-                      className="bg-primary hover:bg-primary/90 text-white text-center py-2.5 rounded-lg flex-1"
-                      onClick={() => handleJoinPitch(selectedPitch.id)}
-                    >
-                      Create a Team
-                    </Link>
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Render payment tracking section */}
-          {renderPaymentTrackingSection()}
-
-          <h2 className="text-xl font-bold text-white mb-4">Other Pitches</h2>
-        </div>
-      ) : null}
-
-      {/* Always show pitch-finding and team-creation UI for all users, including pitch owners */}
-      <div>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold sport-gradient-text mb-2">
-              Find Pitches to Play Today
-            </h1>
-            <p className="text-gray-400 text-sm">
-              Browse available five-a-side pitches and join a team or create
-              your own
-            </p>
-          </div>
-        </div>
-
-        {/* Search and Filters */}
-        <div className="bg-dark-lighter p-4 sm:p-5 rounded-xl mb-8">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-            <div className="flex-grow">
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                Search
-              </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search pitches by name or location"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-primary"
-                />
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-              </div>
-            </div>
-
-            <div className="w-full md:w-1/4">
-              <label className="block text-sm font-medium text-gray-300 mb-1">
-                City
-              </label>
-              <select
-                value={cityFilter}
-                onChange={(e) => setCityFilter(e.target.value)}
-                className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary appearance-none"
-              >
-                <option value="">All Cities</option>
-                {cities.map((city) => (
-                  <option key={city} value={city}>
-                    {city}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {userCoordinates && (
-              <div className="flex items-center mt-4 md:mt-0">
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={distanceSort}
-                    onChange={() => setDistanceSort(!distanceSort)}
-                    className="sr-only"
-                  />
-                  <span
-                    className={`w-10 h-5 ${
-                      distanceSort ? "bg-primary" : "bg-gray-700"
-                    } rounded-full relative transition-colors duration-200 ease-in-out mr-2`}
-                  >
-                    <span
-                      className={`absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${
-                        distanceSort ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    ></span>
-                  </span>
-                  <span className="text-sm text-gray-300">
-                    Sort by Distance
-                  </span>
-                </label>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mb-8">
-          <h2 className="text-xl font-bold mb-4 flex items-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-5 w-5 mr-2 text-primary"
-              viewBox="0 0 20 20"
-              fill="currentColor"
-            >
-              <path
-                fillRule="evenodd"
-                d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                clipRule="evenodd"
-              />
-            </svg>
-            Pitches Near You
-          </h2>
-
-          {getFilteredPitches().length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {getFilteredPitches().map((pitch) => {
-                // Calculate distance if user coordinates available
-                let distance = null;
-                if (userCoordinates && pitch.coordinates) {
-                  distance = calculateDistance(
-                    userCoordinates.latitude,
-                    userCoordinates.longitude,
-                    pitch.coordinates.latitude,
-                    pitch.coordinates.longitude
-                  );
-                }
-
-                return (
-                  <div
-                    key={pitch.id}
-                    className="bg-dark-lighter hover:bg-dark-lighter/80 transition-colors duration-200 rounded-lg overflow-hidden border border-gray-700 hover:border-primary/30"
-                  >
-                    <div className="p-5">
-                      <div className="flex justify-between items-start mb-3">
-                        <h3 className="font-bold text-lg">{pitch.name}</h3>
-                        <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                          Available
-                        </span>
+                        <div className="p-4">
+                          <h3 className="font-bold text-lg text-white">
+                            {pitch.name}
+                          </h3>
+                          <p className="text-gray-400 text-sm">
+                            {pitch.location}
+                          </p>
+                          <div className="mt-2 flex items-center text-xs text-green-400">
+                            <svg
+                              className="w-4 h-4 mr-1"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                              <path
+                                fillRule="evenodd"
+                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Owner
+                          </div>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                !isEditing && (
+                  <div className="bg-dark-light/20 rounded-lg p-4 sm:p-6 mb-8 text-center">
+                    <h2 className="text-xl font-bold text-white mb-2">
+                      No Pitches Registered Yet
+                    </h2>
+                    <p className="text-gray-400 mb-4">
+                      Register your first pitch to start hosting matches
+                    </p>
+                    <button
+                      onClick={handleCreatePitch}
+                      className="bg-gradient-to-r from-green-600 to-green-500 text-white px-6 py-3 rounded-md"
+                    >
+                      Register Your First Pitch
+                    </button>
+                  </div>
+                )
+              )}
 
-                      <div className="flex items-center text-gray-400 text-sm mb-3">
+              {/* Display selected pitch details inline */}
+              {selectedPitch && !isEditing && (
+                <div className="bg-dark-lighter rounded-lg p-4 sm:p-6 mb-8">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h2 className="text-xl sm:text-2xl font-bold mb-1">
+                        {selectedPitch.name}
+                      </h2>
+                      <p className="text-gray-400">{selectedPitch.location}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedPitch(null)}
+                      className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <p className="text-gray-300 mb-6">
+                    {selectedPitch.description}
+                  </p>
+
+                  {/* Add location map view */}
+                  {selectedPitch.coordinates && (
+                    <div className="mb-6">
+                      <h3 className="font-semibold mb-3 text-gray-300">
+                        Location
+                      </h3>
+                      <div className="bg-dark rounded-lg overflow-hidden">
+                        <LocationPicker
+                          coordinates={selectedPitch.coordinates}
+                          onLocationSelected={() => {}}
+                          readOnly={true}
+                        />
+                      </div>
+                      <div className="mt-2 text-sm text-gray-400 flex items-center">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           className="h-4 w-4 mr-1 text-gray-500"
@@ -1263,64 +1395,323 @@ const PitchesPage: React.FC = () => {
                             d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                           />
                         </svg>
-                        {pitch.city}
-                        {pitch.state ? `, ${pitch.state}` : ""}
-
-                        {distance !== null && (
-                          <span className="ml-2 text-xs bg-dark py-0.5 px-1.5 rounded-full">
-                            {distance.toFixed(1)} km
-                          </span>
-                        )}
+                        {selectedPitch.address}, {selectedPitch.city},{" "}
+                        {selectedPitch.state}
                       </div>
+                    </div>
+                  )}
 
-                      <p className="text-gray-500 text-xs mb-4 line-clamp-2">
-                        {pitch.description}
-                      </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                    <div className="bg-dark p-4 rounded-lg">
+                      <h3 className="font-semibold mb-2 text-gray-300">
+                        Match Settings
+                      </h3>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Match Duration:</span>
+                          <span>
+                            {selectedPitch.customSettings?.matchDuration
+                              ? selectedPitch.customSettings.matchDuration / 60
+                              : 15}{" "}
+                            minutes
+                          </span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Max Goals:</span>
+                          <span>
+                            {selectedPitch.customSettings?.maxGoals || 7} goals
+                          </span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Draws Allowed:</span>
+                          <span>
+                            {selectedPitch.customSettings?.allowDraws
+                              ? "Yes"
+                              : "No"}
+                          </span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Team Size:</span>
+                          <span>
+                            {selectedPitch.customSettings?.maxPlayersPerTeam ||
+                              5}
+                            -a-side
+                          </span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Price:</span>
+                          <span className="font-semibold text-primary">
+                            ₦
+                            {selectedPitch.pricePerPerson?.toLocaleString() ||
+                              "2,000"}
+                            /person
+                          </span>
+                        </li>
+                      </ul>
+                    </div>
+                    <div className="bg-dark p-4 rounded-lg">
+                      <h3 className="font-semibold mb-2 text-gray-300">
+                        Pitch Info
+                      </h3>
+                      <ul className="space-y-2 text-sm">
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Surface:</span>
+                          <span>Artificial Turf</span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Indoor/Outdoor:</span>
+                          <span>
+                            {selectedPitch.name.includes("Indoor")
+                              ? "Indoor"
+                              : "Outdoor"}
+                          </span>
+                        </li>
+                        <li className="flex justify-between">
+                          <span className="text-gray-400">Changing Rooms:</span>
+                          <span>Available</span>
+                        </li>
+                      </ul>
+                    </div>
+                  </div>
 
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3 w-3 mr-1"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                  {/* Referees Section */}
+                  <div className="bg-dark p-4 rounded-lg mb-6">
+                    <h3 className="font-semibold mb-2 text-gray-300">
+                      Referees
+                    </h3>
+                    {selectedPitch.referees &&
+                    selectedPitch.referees.length > 0 ? (
+                      <ul className="space-y-1 text-sm">
+                        {selectedPitch.referees.map((refereeId) => (
+                          <li
+                            key={refereeId}
+                            className="flex items-center text-gray-300"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          {pitch.customSettings?.matchDuration
-                            ? pitch.customSettings.matchDuration / 60
-                            : 15}{" "}
-                          min
-                        </span>
-                        <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3 w-3 mr-1"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                            />
-                          </svg>
-                          {pitch.customSettings?.maxPlayersPerTeam || 5}
-                          -a-side
-                        </span>
-                        {pitch.availability && (
-                          <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
-                              className="h-3 w-3 mr-1"
+                              className="h-4 w-4 mr-2 text-green-500"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path
+                                fillRule="evenodd"
+                                d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
+                                clipRule="evenodd"
+                              />
+                            </svg>
+                            Referee (ID: {refereeId.substring(0, 8)})
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-gray-400">
+                        No referees assigned yet
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
+                    {isPitchOwner &&
+                    (currentUser?.ownedPitches?.includes(selectedPitch.id) ||
+                      selectedPitch.ownerId === currentUser?.id) ? (
+                      <button
+                        onClick={handleEditPitch}
+                        className="btn-primary flex-1 py-2.5"
+                      >
+                        Edit Pitch
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            handleJoinPitch(selectedPitch.id);
+                            setSelectedPitch(null);
+                          }}
+                          className="bg-dark hover:bg-dark-light text-white text-center py-2.5 rounded-lg flex-1"
+                        >
+                          Join This Pitch
+                        </button>
+                        <Link
+                          to="/teams"
+                          className="bg-primary hover:bg-primary/90 text-white text-center py-2.5 rounded-lg flex-1"
+                          onClick={(e) => {
+                            e.preventDefault(); // Prevent default to handle navigation manually
+                            console.log(
+                              "Create a Team clicked for pitch:",
+                              selectedPitch.id
+                            );
+
+                            // First set the selected pitch ID
+                            handleJoinPitch(selectedPitch.id);
+
+                            // Short delay to ensure the context is updated before navigation
+                            setTimeout(() => {
+                              console.log(
+                                "Navigating to /teams with selected pitch:",
+                                localStorage.getItem("selectedPitchId")
+                              );
+                              navigate("/teams");
+                            }, 100);
+                          }}
+                        >
+                          Create a Team
+                        </Link>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Render payment tracking section */}
+              {renderPaymentTrackingSection()}
+
+              <h2 className="text-xl font-bold text-white mb-4">
+                Other Pitches
+              </h2>
+            </div>
+          ) : null}
+
+          {/* Always show pitch-finding and team-creation UI for all users, including pitch owners */}
+          <div>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-bold sport-gradient-text mb-2">
+                  Find Pitches to Play Today
+                </h1>
+                <p className="text-gray-400 text-sm">
+                  Browse available five-a-side pitches and join a team or create
+                  your own
+                </p>
+              </div>
+            </div>
+
+            {/* Search and Filters */}
+            <div className="bg-dark-lighter p-4 sm:p-5 rounded-xl mb-8">
+              <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+                <div className="flex-grow">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    Search
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search pitches by name or location"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-primary"
+                    />
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                <div className="w-full md:w-1/4">
+                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                    City
+                  </label>
+                  <select
+                    value={cityFilter}
+                    onChange={(e) => setCityFilter(e.target.value)}
+                    className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary appearance-none"
+                  >
+                    <option value="">All Cities</option>
+                    {cities.map((city) => (
+                      <option key={city} value={city}>
+                        {city}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {userCoordinates && (
+                  <div className="flex items-center mt-4 md:mt-0">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={distanceSort}
+                        onChange={() => setDistanceSort(!distanceSort)}
+                        className="sr-only"
+                      />
+                      <span
+                        className={`w-10 h-5 ${
+                          distanceSort ? "bg-primary" : "bg-gray-700"
+                        } rounded-full relative transition-colors duration-200 ease-in-out mr-2`}
+                      >
+                        <span
+                          className={`absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${
+                            distanceSort ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        ></span>
+                      </span>
+                      <span className="text-sm text-gray-300">
+                        Sort by Distance
+                      </span>
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mb-8">
+              <h2 className="text-xl font-bold mb-4 flex items-center">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-5 w-5 mr-2 text-primary"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                Pitches Near You
+              </h2>
+
+              {getFilteredPitches().length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {getFilteredPitches().map((pitch) => {
+                    // Calculate distance if user coordinates available
+                    let distance = null;
+                    if (userCoordinates && pitch.coordinates) {
+                      distance = calculateDistance(
+                        userCoordinates.latitude,
+                        userCoordinates.longitude,
+                        pitch.coordinates.latitude,
+                        pitch.coordinates.longitude
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={pitch.id}
+                        className="bg-dark-lighter hover:bg-dark-lighter/80 transition-colors duration-200 rounded-lg overflow-hidden border border-gray-700 hover:border-primary/30"
+                      >
+                        <div className="p-5">
+                          <div className="flex justify-between items-start mb-3">
+                            <h3 className="font-bold text-lg">{pitch.name}</h3>
+                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
+                              Available
+                            </span>
+                          </div>
+
+                          <div className="flex items-center text-gray-400 text-sm mb-3">
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4 mr-1 text-gray-500"
                               fill="none"
                               viewBox="0 0 24 24"
                               stroke="currentColor"
@@ -1329,82 +1720,179 @@ const PitchesPage: React.FC = () => {
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
                                 strokeWidth={2}
-                                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                              />
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                               />
                             </svg>
-                            Open today
-                          </span>
-                        )}
-                        <span className="px-2 py-1 bg-primary/20 rounded-md text-xs text-primary flex items-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3 w-3 mr-1"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            />
-                          </svg>
-                          ₦{pitch.pricePerPerson?.toLocaleString() || "2,000"}
-                          /person
-                        </span>
-                      </div>
+                            {pitch.city}
+                            {pitch.state ? `, ${pitch.state}` : ""}
 
-                      <div className="flex justify-between items-center pt-3 border-t border-gray-700">
-                        <button
-                          onClick={() => handleSelectPitch(pitch)}
-                          className="text-sm text-gray-400 hover:text-white"
-                        >
-                          View Details
-                        </button>
-                        <Link
-                          to="/teams"
-                          className="btn-primary text-sm py-1.5 px-4"
-                          onClick={() => handleJoinPitch(pitch.id)}
-                        >
-                          Play Here
-                        </Link>
+                            {distance !== null && (
+                              <span className="ml-2 text-xs bg-dark py-0.5 px-1.5 rounded-full">
+                                {distance.toFixed(1)} km
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-gray-500 text-xs mb-4 line-clamp-2">
+                            {pitch.description}
+                          </p>
+
+                          <div className="flex flex-wrap gap-2 mb-4">
+                            <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-3 w-3 mr-1"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              {pitch.customSettings?.matchDuration
+                                ? pitch.customSettings.matchDuration / 60
+                                : 15}{" "}
+                              min
+                            </span>
+                            <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-3 w-3 mr-1"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                                />
+                              </svg>
+                              {pitch.customSettings?.maxPlayersPerTeam || 5}
+                              -a-side
+                            </span>
+                            {pitch.availability && (
+                              <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3 w-3 mr-1"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                Open today
+                              </span>
+                            )}
+                            <span className="px-2 py-1 bg-primary/20 rounded-md text-xs text-primary flex items-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-3 w-3 mr-1"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                              ₦
+                              {pitch.pricePerPerson?.toLocaleString() ||
+                                "2,000"}
+                              /person
+                            </span>
+                          </div>
+
+                          <div className="flex justify-between items-center pt-3 border-t border-gray-700">
+                            <button
+                              onClick={() => handleSelectPitch(pitch)}
+                              className="text-sm text-gray-400 hover:text-white"
+                            >
+                              View Details
+                            </button>
+                            <Link
+                              to="/teams"
+                              className="btn-primary text-sm py-1.5 px-4"
+                              onClick={(e) => {
+                                e.preventDefault(); // Prevent default to handle navigation manually
+                                console.log(
+                                  "Play Here clicked for pitch:",
+                                  pitch.id
+                                );
+
+                                // First set the selected pitch ID
+                                handleJoinPitch(pitch.id);
+
+                                // Short delay to ensure the context is updated before navigation
+                                setTimeout(() => {
+                                  console.log(
+                                    "Navigating to /teams with selected pitch:",
+                                    localStorage.getItem("selectedPitchId")
+                                  );
+                                  navigate("/teams");
+                                }, 100);
+                              }}
+                            >
+                              Play Here
+                            </Link>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                );
-              })}
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center bg-dark-lighter p-8 rounded-lg border border-gray-700">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-12 w-12 mx-auto text-gray-500 mb-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <h3 className="text-xl font-bold mb-2">No Pitches Found</h3>
+                  <p className="text-gray-400 mb-4">
+                    Try adjusting your filters or search terms
+                  </p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center bg-dark-lighter p-8 rounded-lg border border-gray-700">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-12 w-12 mx-auto text-gray-500 mb-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
-              <h3 className="text-xl font-bold mb-2">No Pitches Found</h3>
-              <p className="text-gray-400 mb-4">
-                Try adjusting your filters or search terms
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* Payment Action Confirmation Modal */}
       {showConfirmModal && confirmAction && (
@@ -1579,6 +2067,18 @@ const PitchesPage: React.FC = () => {
                   </div>
                 </div>
 
+                <div className="border-t border-gray-700 pt-4 mb-4">
+                  <h3 className="font-semibold mb-3">Location on Map</h3>
+                  <p className="text-sm text-gray-400 mb-3">
+                    Set your pitch's exact location on the map. This helps
+                    players find your pitch easily.
+                  </p>
+                  <LocationPicker
+                    coordinates={formData.coordinates}
+                    onLocationSelected={handleLocationSelected}
+                  />
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-1">
                     Description
@@ -1666,10 +2166,13 @@ const PitchesPage: React.FC = () => {
                         onChange={handleSettingsChange}
                         className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary appearance-none"
                       >
+                        <option value={3}>3-a-side</option>
+                        <option value={4}>4-a-side</option>
                         <option value={5}>5-a-side</option>
-                        <option value={6}>6-a-side</option>
-                        <option value={7}>7-a-side</option>
                       </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Maximum team size is 5-a-side
+                      </p>
                     </div>
                     <div>
                       <label className="flex items-center h-full pt-4">
@@ -1746,6 +2249,7 @@ const PitchesPage: React.FC = () => {
                           onChange={(e) => setRefereeName(e.target.value)}
                           className="bg-dark-light border border-gray-700 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-primary"
                           placeholder="Enter name"
+                          disabled={addingReferee}
                         />
                       </div>
                       <div>
@@ -1758,20 +2262,54 @@ const PitchesPage: React.FC = () => {
                           onChange={(e) => setRefereeEmail(e.target.value)}
                           className="bg-dark-light border border-gray-700 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-primary"
                           placeholder="Enter email"
+                          disabled={addingReferee}
                         />
                       </div>
                     </div>
+
+                    {refereeError && (
+                      <div className="mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-400 text-xs">
+                        {refereeError}
+                      </div>
+                    )}
+
                     <button
                       type="button"
                       onClick={handleAddReferee}
-                      disabled={!refereeName || !refereeEmail}
-                      className={`w-full py-1.5 rounded-lg text-sm ${
-                        !refereeName || !refereeEmail
+                      disabled={!refereeName || !refereeEmail || addingReferee}
+                      className={`w-full py-1.5 rounded-lg text-sm flex items-center justify-center ${
+                        !refereeName || !refereeEmail || addingReferee
                           ? "bg-gray-700 text-gray-400 cursor-not-allowed"
                           : "bg-primary/20 text-primary hover:bg-primary/30"
                       }`}
                     >
-                      Add Referee
+                      {addingReferee ? (
+                        <>
+                          <svg
+                            className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            ></circle>
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            ></path>
+                          </svg>
+                          Adding...
+                        </>
+                      ) : (
+                        "Add Referee"
+                      )}
                     </button>
                   </div>
                 </div>
@@ -1781,17 +2319,251 @@ const PitchesPage: React.FC = () => {
                     type="button"
                     onClick={handleCancel}
                     className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
+                    disabled={submitting}
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg"
+                    disabled={submitting}
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center"
                   >
-                    {selectedPitch ? "Save Changes" : "Register Pitch"}
+                    {submitting ? (
+                      <>
+                        <svg
+                          className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        {selectedPitch ? "Saving..." : "Creating..."}
+                      </>
+                    ) : selectedPitch ? (
+                      "Save Changes"
+                    ) : (
+                      "Register Pitch"
+                    )}
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add this modal to show pitch details for all users */}
+      {selectedPitch && !isEditing && !isPitchOwner && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div
+            className="absolute inset-0 bg-black/80"
+            onClick={() => setSelectedPitch(null)}
+          ></div>
+          <div className="relative bg-dark-lighter rounded-xl w-full max-w-3xl my-8 shadow-xl overflow-hidden">
+            <div className="p-4 md:p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-bold mb-1">
+                    {selectedPitch.name}
+                  </h2>
+                  <p className="text-gray-400">{selectedPitch.location}</p>
+                </div>
+                <button
+                  onClick={() => setSelectedPitch(null)}
+                  className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              <p className="text-gray-300 mb-6">{selectedPitch.description}</p>
+
+              {/* Location map view */}
+              {selectedPitch.coordinates && (
+                <div className="mb-6">
+                  <h3 className="font-semibold mb-3 text-gray-300">Location</h3>
+                  <div className="bg-dark rounded-lg overflow-hidden">
+                    <LocationPicker
+                      coordinates={selectedPitch.coordinates}
+                      onLocationSelected={() => {}}
+                      readOnly={true}
+                    />
+                  </div>
+                  <div className="mt-2 text-sm text-gray-400 flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4 mr-1 text-gray-500"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                      />
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      />
+                    </svg>
+                    {selectedPitch.address}, {selectedPitch.city},{" "}
+                    {selectedPitch.state}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-dark p-4 rounded-lg">
+                  <h3 className="font-semibold mb-2 text-gray-300">
+                    Match Settings
+                  </h3>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Match Duration:</span>
+                      <span>
+                        {selectedPitch.customSettings?.matchDuration
+                          ? selectedPitch.customSettings.matchDuration / 60
+                          : 15}{" "}
+                        minutes
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Max Goals:</span>
+                      <span>
+                        {selectedPitch.customSettings?.maxGoals || 7} goals
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Draws Allowed:</span>
+                      <span>
+                        {selectedPitch.customSettings?.allowDraws
+                          ? "Yes"
+                          : "No"}
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Team Size:</span>
+                      <span>
+                        {selectedPitch.customSettings?.maxPlayersPerTeam || 5}
+                        -a-side
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Price:</span>
+                      <span className="font-semibold text-primary">
+                        ₦
+                        {selectedPitch.pricePerPerson?.toLocaleString() ||
+                          "2,000"}
+                        /person
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+                <div className="bg-dark p-4 rounded-lg">
+                  <h3 className="font-semibold mb-2 text-gray-300">
+                    Pitch Info
+                  </h3>
+                  <ul className="space-y-2 text-sm">
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Surface:</span>
+                      <span>Artificial Turf</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Indoor/Outdoor:</span>
+                      <span>
+                        {selectedPitch.name.includes("Indoor")
+                          ? "Indoor"
+                          : "Outdoor"}
+                      </span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Changing Rooms:</span>
+                      <span>Available</span>
+                    </li>
+                    <li className="flex justify-between">
+                      <span className="text-gray-400">Availability:</span>
+                      <span>
+                        {selectedPitch.availability.daysOpen.length === 7
+                          ? "All week"
+                          : selectedPitch.availability.daysOpen
+                              .map(
+                                (day) =>
+                                  day.charAt(0).toUpperCase() +
+                                  day.slice(1).toLowerCase()
+                              )
+                              .join(", ")}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
+                <button
+                  onClick={() => {
+                    handleJoinPitch(selectedPitch.id);
+                    setSelectedPitch(null);
+                  }}
+                  className="bg-dark hover:bg-dark-light text-white text-center py-2.5 rounded-lg flex-1"
+                >
+                  Join This Pitch
+                </button>
+                <Link
+                  to="/teams"
+                  className="bg-primary hover:bg-primary/90 text-white text-center py-2.5 rounded-lg flex-1"
+                  onClick={(e) => {
+                    e.preventDefault(); // Prevent default to handle navigation manually
+                    console.log(
+                      "Create a Team clicked for pitch:",
+                      selectedPitch.id
+                    );
+
+                    // First set the selected pitch ID
+                    handleJoinPitch(selectedPitch.id);
+
+                    // Short delay to ensure the context is updated before navigation
+                    setTimeout(() => {
+                      console.log(
+                        "Navigating to /teams with selected pitch:",
+                        localStorage.getItem("selectedPitchId")
+                      );
+                      navigate("/teams");
+                    }, 100);
+                  }}
+                >
+                  Create a Team
+                </Link>
+              </div>
             </div>
           </div>
         </div>

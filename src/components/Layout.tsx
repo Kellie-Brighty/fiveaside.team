@@ -89,6 +89,23 @@ const PitchesIcon = () => (
   </svg>
 );
 
+const RefereeIcon = () => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    className="h-6 w-6"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+    />
+  </svg>
+);
+
 // const UserIcon = () => (
 //   <svg
 //     xmlns="http://www.w3.org/2000/svg"
@@ -152,6 +169,12 @@ const Layout: React.FC = () => {
       label: "My Teams",
       icon: TeamsIcon,
       roles: ["player", "referee", "pitch_owner"],
+    },
+    {
+      path: "/referee-overview",
+      label: "My Pitches",
+      icon: RefereeIcon,
+      roles: ["referee"],
     },
     {
       path: "/matches",
@@ -323,86 +346,46 @@ const Layout: React.FC = () => {
       <header className="sport-gradient py-3 px-4 md:hidden sticky top-0 z-40">
         <div className="flex justify-between items-center">
           <Link to="/" className="flex flex-col items-start">
-            <span className="text-xl font-bold text-white leading-tight">
-              Fiveaside.team
-            </span>
-            <span className="text-xs font-semibold text-gray-300 tracking-wide mt-[-2px] ml-0.5">
-              by Trextechies
-            </span>
+            <span className="text-xl font-bold text-white">Fiveaside.team</span>
+            {isPitchOwner && (
+              <span className="text-xs text-yellow-300">Pitch Owner</span>
+            )}
+            {isReferee && (
+              <span className="text-xs text-blue-300">Referee</span>
+            )}
           </Link>
-
-          {isAuthenticated ? (
-            <div className="flex items-center">
-              <div className="flex items-center bg-dark-lighter/60 backdrop-blur-sm pl-2 pr-3 py-1 rounded-full">
-                <div
-                  className={`w-2 h-2 rounded-full ${
-                    isReferee
-                      ? "bg-secondary"
-                      : isPitchOwner
-                      ? "bg-green-400"
-                      : "bg-primary"
-                  } mr-2`}
-                ></div>
-                <span className="text-white text-xs">{currentUser?.name}</span>
-
-                {/* Mobile role indicator */}
-                <span
-                  className={`
-                  ml-1.5 px-1.5 py-0.5 rounded-sm text-[10px] uppercase tracking-wide font-medium
-                  ${
-                    isReferee
-                      ? "bg-secondary/20 text-pink-300"
-                      : isPitchOwner
-                      ? "bg-green-500/20 text-emerald-300"
-                      : "bg-primary/20 text-violet-300"
-                  }
-                `}
+          <div className="flex space-x-3 items-center">
+            {isAuthenticated ? (
+              <div className="relative">
+                <button
+                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
+                  onClick={handleLogoutClick}
                 >
-                  {isReferee ? "REF" : isPitchOwner ? "OWNER" : "PLAYER"}
-                </span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                    />
+                  </svg>
+                </button>
               </div>
-              <button
-                onClick={handleLogoutClick}
-                className="ml-2 p-1.5 bg-dark-lighter/60 backdrop-blur-sm rounded-full"
+            ) : (
+              <Link
+                to="/login"
+                className="py-2 px-4 bg-primary/20 text-primary hover:bg-primary/30 rounded-lg text-sm font-medium transition-colors"
               >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-4 w-4 text-gray-300"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                  />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <Link
-              to="/login"
-              className="text-white flex items-center border-l-4 border-primary bg-dark-lighter/50 backdrop-blur-sm px-3 py-1.5 rounded-r-md"
-            >
-              <span className="text-xs font-medium">Sign In</span>
-              <span className="ml-1.5 bg-primary w-5 h-5 rounded-full flex items-center justify-center">
-                <svg
-                  className="w-3 h-3"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </span>
-            </Link>
-          )}
+                Login
+              </Link>
+            )}
+          </div>
         </div>
       </header>
 

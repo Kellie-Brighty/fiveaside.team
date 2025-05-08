@@ -8,6 +8,7 @@ import MatchesPage from "./pages/MatchesPage";
 import BettingPage from "./pages/BettingPage";
 import PitchesPage from "./pages/PitchesPage";
 import LoginPage from "./pages/LoginPage";
+import RefereeOverviewPage from "./pages/RefereeOverviewPage";
 import AuthProvider, { useAuth } from "./contexts/AuthContext";
 import RequireAuth from "./components/RequireAuth";
 import ScrollToTop from "./components/ScrollToTop";
@@ -35,6 +36,7 @@ const AppContent: React.FC = () => {
           </Route>
           <Route element={<RequireAuth requireReferee />}>
             <Route path="matches" element={<MatchesPage />} />
+            <Route path="referee-overview" element={<RefereeOverviewPage />} />
           </Route>
         </Route>
       </Routes>
