@@ -24,6 +24,7 @@ interface PitchSettings {
   matchDuration: number;
   maxGoals: number;
   allowDraws: boolean;
+  maxPlayersPerTeam: number; // Maximum number of players allowed per team
   customColors?: {
     primary: string;
     secondary: string;
@@ -74,6 +75,7 @@ const mockPitches: Pitch[] = [
       matchDuration: 900, // 15 minutes
       maxGoals: 7,
       allowDraws: false,
+      maxPlayersPerTeam: 5,
     },
   },
   {
@@ -87,6 +89,7 @@ const mockPitches: Pitch[] = [
       matchDuration: 1200, // 20 minutes
       maxGoals: 10,
       allowDraws: true,
+      maxPlayersPerTeam: 5,
     },
   },
   {
@@ -100,6 +103,7 @@ const mockPitches: Pitch[] = [
       matchDuration: 900,
       maxGoals: 8,
       allowDraws: false,
+      maxPlayersPerTeam: 5,
     },
   },
   {
@@ -113,6 +117,7 @@ const mockPitches: Pitch[] = [
       matchDuration: 1080, // 18 minutes
       maxGoals: 9,
       allowDraws: true,
+      maxPlayersPerTeam: 5,
     },
   },
 ];
@@ -284,6 +289,7 @@ const TeamsPage: React.FC = () => {
                 matchDuration: 900,
                 maxGoals: 7,
                 allowDraws: false,
+                maxPlayersPerTeam: 5,
               },
             };
 
@@ -458,6 +464,13 @@ const TeamsPage: React.FC = () => {
       return;
     }
 
+    if (userTeamActivity?.joinedTeamId) {
+      setErrorMessage(
+        "You have already joined a team today and cannot create a new team"
+      );
+      return;
+    }
+
     try {
       const newTeamData = {
         name: newTeamName,
@@ -619,6 +632,7 @@ const TeamsPage: React.FC = () => {
               matchDuration: 900,
               maxGoals: 7,
               allowDraws: false,
+              maxPlayersPerTeam: 5,
             },
           };
 
@@ -697,6 +711,7 @@ const TeamsPage: React.FC = () => {
           matchDuration: 900,
           maxGoals: 7,
           allowDraws: false,
+          maxPlayersPerTeam: 5,
         },
       };
     }
@@ -741,6 +756,7 @@ const TeamsPage: React.FC = () => {
             matchDuration: 900,
             maxGoals: 7,
             allowDraws: false,
+            maxPlayersPerTeam: 5,
           },
         };
 
@@ -783,6 +799,9 @@ const TeamsPage: React.FC = () => {
                 {selectedPitchObject.customSettings.allowDraws
                   ? "allowed"
                   : "not allowed"}
+              </span>
+              <span className="bg-dark px-2 py-1 rounded-md text-xs text-gray-300">
+                {selectedPitchObject.customSettings.maxPlayersPerTeam}-a-side
               </span>
             </div>
           )}
@@ -871,8 +890,12 @@ const TeamsPage: React.FC = () => {
     );
   }, [teams, selectedPitch, todayDateString, searchQuery]);
 
-  // Check if a team is full (5 players)
-  const isTeamFull = (team: Team) => team.players.length >= 5;
+  // Check if a team is full based on pitch settings
+  const isTeamFull = (team: Team) => {
+    const maxPlayers =
+      selectedPitchObject?.customSettings?.maxPlayersPerTeam || 5;
+    return team.players.length >= maxPlayers;
+  };
 
   // Check if the current user created this team
   const isUserTeamCreator = (team: Team) => team.createdBy === currentUser?.id;
@@ -1134,7 +1157,9 @@ const TeamsPage: React.FC = () => {
             </button>
             <button
               className={`btn-primary flex items-center ${
-                !selectedPitchObject || userTeamActivity?.createdTeamId
+                !selectedPitchObject ||
+                userTeamActivity?.createdTeamId ||
+                userTeamActivity?.joinedTeamId
                   ? "opacity-50 cursor-not-allowed"
                   : ""
               }`}
@@ -1149,10 +1174,19 @@ const TeamsPage: React.FC = () => {
                   return;
                 }
 
+                if (userTeamActivity?.joinedTeamId) {
+                  setErrorMessage(
+                    "You have already joined a team today and cannot create a new team"
+                  );
+                  return;
+                }
+
                 setShowAddTeamForm(!showAddTeamForm);
               }}
               disabled={
-                !selectedPitchObject || !!userTeamActivity?.createdTeamId
+                !selectedPitchObject ||
+                !!userTeamActivity?.createdTeamId ||
+                !!userTeamActivity?.joinedTeamId
               }
             >
               {showAddTeamForm ? (
@@ -1369,14 +1403,20 @@ const TeamsPage: React.FC = () => {
                     >
                       {isTeamFull(team)
                         ? "Full team"
-                        : `Need ${5 - team.players.length} more`}
+                        : `Need ${
+                            (selectedPitchObject?.customSettings
+                              ?.maxPlayersPerTeam || 5) - team.players.length
+                          } more`}
                     </div>
                   </div>
 
                   <div className="mb-6">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="text-sm font-semibold text-gray-300">
-                        Players ({team.players.length}/5)
+                        Players ({team.players.length}/
+                        {selectedPitchObject?.customSettings
+                          ?.maxPlayersPerTeam || 5}
+                        )
                       </h4>
                       <button
                         className="text-xs text-primary flex items-center hover:text-primary/80"
