@@ -10,7 +10,6 @@ import {
   addDoc,
   updateDoc,
   doc,
-  
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -316,6 +315,13 @@ const MatchesPage: React.FC = () => {
           pitchId: newMatch.pitchId,
           refereeId: currentUser?.id,
           matchDate: todayString, // Ensure matchDate is included
+          // Add pitch settings for reference
+          pitchSettings: selectedPitch?.customSettings || {
+            matchDuration: 600,
+            maxGoals: 7,
+            allowDraws: false,
+            maxPlayersPerTeam: 5,
+          },
         };
 
         console.log("Creating new match in Firestore:", matchData);
@@ -344,6 +350,13 @@ const MatchesPage: React.FC = () => {
             status: "in-progress",
             startTime: serverTimestamp(),
             isActive: true,
+            // Add pitch settings for reference if not already there
+            pitchSettings: selectedPitch?.customSettings || {
+              matchDuration: 600,
+              maxGoals: 7,
+              allowDraws: false,
+              maxPlayersPerTeam: 5,
+            },
           });
         }
 
@@ -405,70 +418,151 @@ const MatchesPage: React.FC = () => {
         };
 
         console.log("Updating match in Firestore:", matchToEnd.id, updateData);
-        console.log(`Match ended as ${matchToEnd.scoreA === matchToEnd.scoreB ? 'draw' : 'win'} with endTime recorded`);
+        console.log(
+          `Match ended as ${
+            matchToEnd.scoreA === matchToEnd.scoreB ? "draw" : "win"
+          } with endTime recorded`
+        );
         await updateDoc(matchRef, updateData);
         console.log("Match updated successfully");
       }
 
       // Add match to history
       setMatchHistory([matchToEnd, ...matchHistory]);
+
+      // Setup next match (only after the current match is properly updated in Firebase)
+      await setupNextMatch(matchToEnd);
     } catch (error) {
       console.error("Error updating match in Firebase:", error);
     } finally {
       setIsSavingMatch(false);
     }
+  };
 
-    // Rotational queue logic
-    if (matchToEnd.scoreA === matchToEnd.scoreB) {
-      // Draw: both teams go to the back in random order
-      let newQueue = [...waitingTeams];
-      const teamsToAdd = [matchToEnd.teamA, matchToEnd.teamB];
-      // Shuffle the two teams
-      for (let i = teamsToAdd.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [teamsToAdd[i], teamsToAdd[j]] = [teamsToAdd[j], teamsToAdd[i]];
-      }
-      newQueue = [...newQueue, ...teamsToAdd];
-      if (newQueue.length < 2) {
-        setCurrentMatch(null);
+  // New function to handle setting up the next match after one ends
+  const setupNextMatch = async (matchToEnd: Match) => {
+    let nextMatch: Match | null = null;
+
+    try {
+      if (matchToEnd.scoreA === matchToEnd.scoreB) {
+        // Draw: both teams go to the back in random order
+        let newQueue = [...waitingTeams];
+        const teamsToAdd = [matchToEnd.teamA, matchToEnd.teamB];
+        // Shuffle the two teams
+        for (let i = teamsToAdd.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [teamsToAdd[i], teamsToAdd[j]] = [teamsToAdd[j], teamsToAdd[i]];
+        }
+        newQueue = [...newQueue, ...teamsToAdd];
+
+        if (newQueue.length < 2) {
+          setCurrentMatch(null);
+          return;
+        } else {
+          nextMatch = {
+            id: "temp-" + Date.now(),
+            teamA: newQueue[0],
+            teamB: newQueue[1],
+            scoreA: 0,
+            scoreB: 0,
+            status: "scheduled",
+            isActive: false,
+            pitchId: selectedPitch?.id || "pitch1",
+          };
+          setWaitingTeams(newQueue.slice(2));
+        }
       } else {
-        setCurrentMatch({
-          id: (matchHistory.length + 2).toString(),
-          teamA: newQueue[0],
-          teamB: newQueue[1],
+        // Winner stays, loser goes to back
+        const winner =
+          matchToEnd.scoreA > matchToEnd.scoreB
+            ? matchToEnd.teamA
+            : matchToEnd.teamB;
+        const loser =
+          matchToEnd.scoreA > matchToEnd.scoreB
+            ? matchToEnd.teamB
+            : matchToEnd.teamA;
+        let newQueue = [...waitingTeams, loser];
+
+        if (newQueue.length === 0) {
+          setCurrentMatch(null);
+          return;
+        } else {
+          nextMatch = {
+            id: "temp-" + Date.now(),
+            teamA: winner,
+            teamB: newQueue[0],
+            scoreA: 0,
+            scoreB: 0,
+            status: "scheduled",
+            isActive: false,
+            pitchId: selectedPitch?.id || "pitch1",
+          };
+          setWaitingTeams(newQueue.slice(1));
+        }
+      }
+
+      // Save the next match to Firebase so it appears in the betting page
+      if (nextMatch) {
+        // Clean up team objects for Firestore (remove circular references, functions)
+        const teamA = {
+          id: nextMatch.teamA.id,
+          name: nextMatch.teamA.name,
+          players: nextMatch.teamA.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+          })),
+          wins: nextMatch.teamA.wins,
+          losses: nextMatch.teamA.losses,
+          draws: nextMatch.teamA.draws,
+          pitchId: nextMatch.teamA.pitchId,
+        };
+
+        const teamB = {
+          id: nextMatch.teamB.id,
+          name: nextMatch.teamB.name,
+          players: nextMatch.teamB.players.map((p) => ({
+            id: p.id,
+            name: p.name,
+          })),
+          wins: nextMatch.teamB.wins,
+          losses: nextMatch.teamB.losses,
+          draws: nextMatch.teamB.draws,
+          pitchId: nextMatch.teamB.pitchId,
+        };
+
+        // Create match data for Firestore
+        const matchData = {
+          teamA: teamA,
+          teamB: teamB,
           scoreA: 0,
           scoreB: 0,
           status: "scheduled",
           isActive: false,
           pitchId: selectedPitch?.id || "pitch1",
-        });
-        setWaitingTeams(newQueue.slice(2));
+          refereeId: currentUser?.id,
+          matchDate: todayString,
+          // Add pitch settings reference
+          pitchSettings: selectedPitch?.customSettings || {
+            matchDuration: 600,
+            maxGoals: 7,
+            allowDraws: false,
+            maxPlayersPerTeam: 5,
+          },
+        };
+
+        console.log("Creating next match in Firestore:", matchData);
+        const docRef = await addDoc(collection(db, "matches"), matchData);
+        console.log("Next match created with ID:", docRef.id);
+
+        // Update the next match with the Firebase ID
+        nextMatch.id = docRef.id;
+        setCurrentMatch(nextMatch);
       }
-    } else {
-      // Winner stays, loser goes to back
-      const winner =
-        matchToEnd.scoreA > matchToEnd.scoreB
-          ? matchToEnd.teamA
-          : matchToEnd.teamB;
-      const loser =
-        matchToEnd.scoreA > matchToEnd.scoreB
-          ? matchToEnd.teamB
-          : matchToEnd.teamA;
-      let newQueue = [...waitingTeams, loser];
-      if (newQueue.length === 0) {
-        setCurrentMatch(null);
-      } else {
-        setCurrentMatch({
-          id: (matchHistory.length + 2).toString(),
-          teamA: winner,
-          teamB: newQueue[0],
-          scoreA: 0,
-          scoreB: 0,
-          status: "scheduled",
-          isActive: false,
-          pitchId: selectedPitch?.id || "pitch1",
-        });
-        setWaitingTeams(newQueue.slice(1));
+    } catch (error) {
+      console.error("Error setting up next match:", error);
+      // Still update local state even if Firebase save fails
+      if (nextMatch) {
+        setCurrentMatch(nextMatch);
       }
     }
   };
@@ -1089,15 +1183,17 @@ const MatchesPage: React.FC = () => {
                             </p>
                             {team.players.length > 0 && (
                               <div className="flex -space-x-2">
-                                {team.players.slice(0, 3).map((player, _idx) => (
-                                  <div
-                                    key={player.id}
-                                    className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs border border-primary/50"
-                                    title={player.name}
-                                  >
-                                    {player.name.charAt(0)}
-                                  </div>
-                                ))}
+                                {team.players
+                                  .slice(0, 3)
+                                  .map((player, _idx) => (
+                                    <div
+                                      key={player.id}
+                                      className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs border border-primary/50"
+                                      title={player.name}
+                                    >
+                                      {player.name.charAt(0)}
+                                    </div>
+                                  ))}
                                 {team.players.length > 3 && (
                                   <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-xs border border-primary/50">
                                     +{team.players.length - 3}

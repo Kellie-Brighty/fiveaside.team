@@ -1,23 +1,19 @@
 import React from "react";
 
 interface LogoutConfirmModalProps {
-  isOpen: boolean;
-  onClose: () => void;
   onConfirm: () => void;
+  onCancel: () => void;
 }
 
 const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
-  isOpen,
-  onClose,
   onConfirm,
+  onCancel,
 }) => {
-  if (!isOpen) return null;
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
       <div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
+        onClick={onCancel}
       ></div>
 
       <div className="flex min-h-full items-center justify-center p-4">
@@ -53,7 +49,7 @@ const LogoutConfirmModal: React.FC<LogoutConfirmModalProps> = ({
               <button
                 type="button"
                 className="py-2.5 px-5 bg-dark border border-gray-600 rounded-md font-medium text-gray-300 hover:bg-dark-light"
-                onClick={onClose}
+                onClick={onCancel}
               >
                 Cancel
               </button>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import LogoutConfirmModal from "./LogoutConfirmModal";
@@ -130,6 +130,24 @@ const Layout: React.FC = () => {
     useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+  // Add meta viewport tag to handle safe areas
+  useEffect(() => {
+    // Check if viewport meta tag exists
+    let viewportMeta = document.querySelector(
+      'meta[name="viewport"]'
+    ) as HTMLMetaElement;
+
+    if (!viewportMeta) {
+      viewportMeta = document.createElement("meta") as HTMLMetaElement;
+      viewportMeta.name = "viewport";
+      document.head.appendChild(viewportMeta);
+    }
+
+    // Update viewport meta to include viewport-fit=cover for notch support
+    viewportMeta.content =
+      "width=device-width, initial-scale=1, viewport-fit=cover";
+  }, []);
+
   // Check if the current path matches the link path
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -210,9 +228,10 @@ const Layout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-dark flex flex-col pb-16 md:pb-0">
-      {/* Top Header - hidden on small screens */}
-      <header className="sport-gradient py-4 px-6 shadow-lg hidden md:block">
-        <div className="container mx-auto flex justify-between items-center">
+      {/* Top Header - for all screens */}
+      <header className="sport-gradient shadow-lg">
+        {/* Desktop navigation - hidden on small screens */}
+        <div className="container mx-auto justify-between items-center py-4 px-6 hidden md:flex">
           <Link to="/" className="text-2xl font-bold text-white">
             Fiveaside.team
           </Link>
@@ -249,152 +268,121 @@ const Layout: React.FC = () => {
                   <span className="text-white text-sm mr-2">
                     {currentUser?.name}
                   </span>
-
-                  {/* Creative role tag */}
                   <div
-                    className={`
-                    relative px-3 py-1 rounded-full text-xs font-medium
-                    ${
+                    className={`rounded-full text-xs px-2 py-0.5 ${
                       isReferee
-                        ? "bg-gradient-to-r from-secondary/20 to-secondary/10 text-pink-300 border border-secondary/30"
+                        ? "bg-secondary/20 text-secondary"
                         : isPitchOwner
-                        ? "bg-gradient-to-r from-green-500/20 to-green-500/10 text-emerald-300 border border-green-500/30"
-                        : "bg-gradient-to-r from-primary/20 to-primary/10 text-violet-300 border border-primary/30"
-                    }
-                    before:absolute before:inset-0 before:rounded-full before:bg-black/5 before:animate-pulse
-                  `}
+                        ? "bg-green-400/20 text-green-400"
+                        : "bg-primary/20 text-primary"
+                    }`}
                   >
-                    <div className="flex items-center">
-                      {isReferee && (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3.5 w-3.5 mr-1"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path d="M6 3a1 1 0 011-1h.01a1 1 0 010 2H7a1 1 0 01-1-1zm2 3a1 1 0 00-2 0v1a2 2 0 00-2 2v1a2 2 0 002 2h6a2 2 0 002-2v-1a2 2 0 00-2-2V6a1 1 0 10-2 0v1H8V6zm10 8a1 1 0 01-1 1H3a1 1 0 110-2h14a1 1 0 011 1zM5 18a1 1 0 01-1-1v-2a1 1 0 112 0v2a1 1 0 01-1 1zm8-6h2a1 1 0 010 2h-2a1 1 0 010-2z" />
-                          </svg>
-                          Referee
-                        </>
-                      )}
-                      {isPitchOwner && (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3.5 w-3.5 mr-1"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
-                          </svg>
-                          Pitch Owner
-                        </>
-                      )}
-                      {!isReferee && !isPitchOwner && (
-                        <>
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            className="h-3.5 w-3.5 mr-1"
-                            viewBox="0 0 20 20"
-                            fill="currentColor"
-                          >
-                            <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
-                          </svg>
-                          Player
-                        </>
-                      )}
-                    </div>
+                    {isReferee
+                      ? "Referee"
+                      : isPitchOwner
+                      ? "Pitch Manager"
+                      : "Player"}
                   </div>
                 </div>
                 <button
                   onClick={handleLogoutClick}
-                  className="text-sm text-white bg-white/10 hover:bg-white/20 px-3 py-1 rounded"
+                  className="text-white text-sm bg-dark/30 px-3 py-1.5 rounded-md hover:bg-dark/50 transition-colors"
                 >
                   Logout
                 </button>
               </div>
             ) : (
-              <Link
-                to="/login"
-                className="relative text-white font-medium flex items-center gap-1.5 border-2 border-white/30 hover:border-white px-4 py-1.5 rounded-md transition-all duration-300 before:absolute before:inset-0 before:rounded-md before:bg-primary/10 before:backdrop-blur-sm"
-              >
-                <span className="relative z-10 flex items-center">
-                  <span className="w-6 h-6 flex items-center justify-center bg-primary rounded-full mr-1">
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="currentColor"
-                      viewBox="0 0 20 20"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M3 3a1 1 0 011 1v12a1 1 0 11-2 0V4a1 1 0 011-1zm7.707 3.293a1 1 0 010 1.414L9.414 9H17a1 1 0 110 2H9.414l1.293 1.293a1 1 0 01-1.414 1.414l-3-3a1 1 0 010-1.414l3-3a1 1 0 011.414 0z"
-                        clipRule="evenodd"
-                      ></path>
-                    </svg>
-                  </span>
-                  Sign In
-                </span>
-              </Link>
+              <div className="flex space-x-2">
+                <Link
+                  to="/login"
+                  className="text-white bg-dark/30 px-3 py-1.5 rounded-md hover:bg-dark/50 transition-colors text-sm"
+                >
+                  Login
+                </Link>
+                <Link
+                  to="/login?signup=true"
+                  className="text-white bg-primary px-3 py-1.5 rounded-md hover:bg-primary/90 transition-colors text-sm"
+                >
+                  Sign Up
+                </Link>
+              </div>
             )}
           </nav>
         </div>
-      </header>
 
-      {/* Mobile header */}
-      <header className="sport-gradient py-3 px-4 md:hidden sticky top-0 z-40">
-        <div className="flex justify-between items-center">
-          <Link to="/" className="flex flex-col items-start">
-            <span className="text-xl font-bold text-white">Fiveaside.team</span>
-            {isPitchOwner && (
-              <span className="text-xs text-yellow-300">Pitch Owner</span>
-            )}
-            {isReferee && (
-              <span className="text-xs text-blue-300">Referee</span>
-            )}
+        {/* Mobile header - visible only on small screens */}
+        <div
+          className="flex justify-between items-center py-4 px-4 md:hidden"
+          style={{
+            paddingTop: "calc(env(safe-area-inset-top) + 20px)",
+            paddingBottom: "10px",
+            backgroundColor: "rgba(36, 36, 45, 0.98)",
+            backdropFilter: "blur(10px)",
+            position: "sticky",
+            top: 0,
+            zIndex: 40,
+          }}
+        >
+          <Link to="/" className="text-xl font-bold text-white">
+            Fiveaside.team
           </Link>
-          <div className="flex space-x-3 items-center">
-            {isAuthenticated ? (
-              <div className="relative">
-                <button
-                  className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
-                  onClick={handleLogoutClick}
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5 text-white"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ) : (
-              <Link
-                to="/login"
-                className="py-2 px-4 bg-primary/20 text-primary hover:bg-primary/30 rounded-lg text-sm font-medium transition-colors"
+          {isAuthenticated && (
+            <div className="flex items-center">
+              <div
+                className={`rounded-full text-xs px-2 py-0.5 mr-2 ${
+                  isReferee
+                    ? "bg-secondary/20 text-secondary"
+                    : isPitchOwner
+                    ? "bg-green-400/20 text-green-400"
+                    : "bg-primary/20 text-primary"
+                }`}
               >
-                Login
-              </Link>
-            )}
-          </div>
+                {isReferee
+                  ? "Referee"
+                  : isPitchOwner
+                  ? "Pitch Manager"
+                  : "Player"}
+              </div>
+              <button
+                onClick={handleLogoutClick}
+                className="text-white text-xs bg-dark/50 px-2 py-1 rounded-md hover:bg-dark/70 transition-colors"
+                aria-label="Logout"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
-      <main className="container mx-auto py-6 px-4 flex-grow">
+      <main
+        className="flex-grow px-4 py-6 md:px-8"
+        style={{ paddingTop: "10px" }}
+      >
         <Outlet />
       </main>
 
       {/* Mobile navigation bar */}
-      <nav className="mobile-nav">
+      <nav
+        className="mobile-nav"
+        style={{
+          paddingBottom: "max(18px, env(safe-area-inset-bottom))",
+          boxShadow: "0 -4px 10px rgba(0, 0, 0, 0.1)",
+        }}
+      >
         {visibleNavItems.map((item) => (
           <Link
             key={item.path}
@@ -402,24 +390,18 @@ const Layout: React.FC = () => {
             className={`nav-item ${isActive(item.path) ? "active" : ""}`}
           >
             <item.icon />
-            <span>{item.label}</span>
+            <span className="mt-1">{item.label}</span>
           </Link>
         ))}
       </nav>
 
-      {/* Footer */}
-      <footer className="bg-dark-lighter py-4 px-4 text-center hidden md:block">
-        <div className="container mx-auto text-center text-gray-400">
-          <p>&copy; {new Date().getFullYear()} Fiveaside.team by Trextechies</p>
-        </div>
-      </footer>
-
       {/* Logout confirmation modal */}
-      <LogoutConfirmModal
-        isOpen={showLogoutModal}
-        onClose={handleCancelLogout}
-        onConfirm={handleConfirmLogout}
-      />
+      {showLogoutModal && (
+        <LogoutConfirmModal
+          onConfirm={handleConfirmLogout}
+          onCancel={handleCancelLogout}
+        />
+      )}
     </div>
   );
 };

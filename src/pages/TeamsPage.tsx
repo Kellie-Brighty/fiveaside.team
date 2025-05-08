@@ -128,63 +128,63 @@ const getTodayDateString = () => {
   return today.toISOString().split("T")[0];
 };
 
-// Mock teams for today
-const mockTodaysTeams: Team[] = [
-  {
-    id: "1",
-    name: "Lightning Warriors",
-    players: [
-      { id: "1", name: "John Doe", createdAt: new Date() },
-      { id: "2", name: "Jane Smith", createdAt: new Date() },
-      { id: "3", name: "Alex Johnson", createdAt: new Date() },
-      { id: "4", name: "Sam Wilson", createdAt: new Date() },
-      { id: "5", name: "Mike Brown", createdAt: new Date() },
-    ],
-    wins: 2,
-    losses: 1,
-    draws: 0,
-    createdAt: new Date(),
-    pitchId: "pitch1",
-    createdForDate: getTodayDateString(),
-  },
-  {
-    id: "2",
-    name: "Royal Eagles",
-    players: [
-      { id: "6", name: "Tom Smith", createdAt: new Date() },
-      { id: "7", name: "Kate Wilson", createdAt: new Date() },
-      { id: "8", name: "James Brown", createdAt: new Date() },
-      { id: "9", name: "Emma Johnson", createdAt: new Date() },
-      { id: "10", name: "Chris Davis", createdAt: new Date() },
-    ],
-    wins: 1,
-    losses: 2,
-    draws: 0,
-    createdAt: new Date(),
-    pitchId: "pitch2",
-    createdForDate: getTodayDateString(),
-  },
-  {
-    id: "3",
-    name: "Urban Kickers",
-    players: [
-      { id: "11", name: "David Lee", createdAt: new Date() },
-      { id: "12", name: "Sarah Chen", createdAt: new Date() },
-      { id: "13", name: "Ryan Parker", createdAt: new Date() },
-    ],
-    wins: 3,
-    losses: 0,
-    draws: 1,
-    createdAt: new Date(),
-    pitchId: "pitch1",
-    createdForDate: getTodayDateString(),
-  },
-];
+// Remove mock teams
+// const mockTodaysTeams: Team[] = [
+//   {
+//     id: "1",
+//     name: "Lightning Warriors",
+//     players: [
+//       { id: "1", name: "John Doe", createdAt: new Date() },
+//       { id: "2", name: "Jane Smith", createdAt: new Date() },
+//       { id: "3", name: "Alex Johnson", createdAt: new Date() },
+//       { id: "4", name: "Sam Wilson", createdAt: new Date() },
+//       { id: "5", name: "Mike Brown", createdAt: new Date() },
+//     ],
+//     wins: 2,
+//     losses: 1,
+//     draws: 0,
+//     createdAt: new Date(),
+//     pitchId: "pitch1",
+//     createdForDate: getTodayDateString(),
+//   },
+//   {
+//     id: "2",
+//     name: "Royal Eagles",
+//     players: [
+//       { id: "6", name: "Tom Smith", createdAt: new Date() },
+//       { id: "7", name: "Kate Wilson", createdAt: new Date() },
+//       { id: "8", name: "James Brown", createdAt: new Date() },
+//       { id: "9", name: "Emma Johnson", createdAt: new Date() },
+//       { id: "10", name: "Chris Davis", createdAt: new Date() },
+//     ],
+//     wins: 1,
+//     losses: 2,
+//     draws: 0,
+//     createdAt: new Date(),
+//     pitchId: "pitch2",
+//     createdForDate: getTodayDateString(),
+//   },
+//   {
+//     id: "3",
+//     name: "Urban Kickers",
+//     players: [
+//       { id: "11", name: "David Lee", createdAt: new Date() },
+//       { id: "12", name: "Sarah Chen", createdAt: new Date() },
+//       { id: "13", name: "Ryan Parker", createdAt: new Date() },
+//     ],
+//     wins: 3,
+//     losses: 0,
+//     draws: 1,
+//     createdAt: new Date(),
+//     pitchId: "pitch1",
+//     createdForDate: getTodayDateString(),
+//   },
+// ];
 
 const TeamsPage: React.FC = () => {
   const { currentUser, selectedPitchId } = useAuth();
   const navigate = useNavigate();
-  const [teams, setTeams] = useState<Team[]>(mockTodaysTeams);
+  const [teams, setTeams] = useState<Team[]>([]);
   const [showAddTeamForm, setShowAddTeamForm] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [showAddPlayerForm, setShowAddPlayerForm] = useState<string | null>(
@@ -394,61 +394,54 @@ const TeamsPage: React.FC = () => {
   }, [currentUser, selectedPitch, todayDateString, teams]);
 
   // Fetch teams for the selected pitch and today's date
-  useEffect(() => {
-    const fetchTeams = async () => {
-      if (!selectedPitch) return;
+  const fetchTeams = async () => {
+    if (!selectedPitch) return;
 
-      try {
-        setIsLoading(true);
+    try {
+      setIsLoading(true);
 
-        // First try to fetch from Firebase
-        const teamsRef = collection(db, "teams");
-        const q = query(
-          teamsRef,
-          where("pitchId", "==", selectedPitch),
-          where("createdForDate", "==", todayDateString)
-        );
+      // First try to fetch from Firebase
+      const teamsRef = collection(db, "teams");
+      const q = query(
+        teamsRef,
+        where("pitchId", "==", selectedPitch),
+        where("createdForDate", "==", todayDateString)
+      );
 
-        const querySnapshot = await getDocs(q);
+      const querySnapshot = await getDocs(q);
 
-        if (!querySnapshot.empty) {
-          const firebaseTeams: Team[] = querySnapshot.docs.map((doc) => {
-            const data = doc.data();
-            return {
-              id: doc.id,
-              name: data.name,
-              players: data.players || [],
-              wins: data.wins || 0,
-              losses: data.losses || 0,
-              draws: data.draws || 0,
-              createdAt: data.createdAt.toDate(),
-              pitchId: data.pitchId,
-              createdForDate: data.createdForDate,
-              createdBy: data.createdBy,
-            };
-          });
+      if (!querySnapshot.empty) {
+        const firebaseTeams: Team[] = querySnapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            name: data.name,
+            players: data.players || [],
+            wins: data.wins || 0,
+            losses: data.losses || 0,
+            draws: data.draws || 0,
+            createdAt: data.createdAt.toDate(),
+            pitchId: data.pitchId,
+            createdForDate: data.createdForDate,
+            createdBy: data.createdBy,
+          };
+        });
 
-          if (firebaseTeams.length > 0) {
-            setTeams(firebaseTeams);
-          } else {
-            // If no teams in Firebase, use mock data filtered by this pitch
-            setTeams(
-              mockTodaysTeams.filter((t) => t.pitchId === selectedPitch)
-            );
-          }
-        } else {
-          // If no teams in Firebase, use mock data filtered by this pitch
-          setTeams(mockTodaysTeams.filter((t) => t.pitchId === selectedPitch));
-        }
-      } catch (error) {
-        console.error("Error fetching teams:", error);
-        // Fallback to mock data
-        setTeams(mockTodaysTeams.filter((t) => t.pitchId === selectedPitch));
-      } finally {
-        setIsLoading(false);
+        setTeams(firebaseTeams);
+      } else {
+        // If no teams in Firebase, set an empty array instead of using mock data
+        setTeams([]);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+      // Set empty array instead of using mock data
+      setTeams([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchTeams();
   }, [selectedPitch, todayDateString]);
 
@@ -939,8 +932,8 @@ const TeamsPage: React.FC = () => {
 
         setTeams(firebaseTeams);
       } else {
-        // If no teams in Firebase, use mock data
-        setTeams(mockTodaysTeams.filter((t) => t.pitchId === selectedPitch));
+        // If no teams in Firebase, set empty array instead of using mock data
+        setTeams([]);
       }
     } catch (error) {
       console.error("Error refreshing teams:", error);

@@ -103,6 +103,9 @@ export interface Bet {
   createdAt: Date;
   pitchId: string; // Which pitch this bet belongs to
   winnings?: number; // Winnings in Naira
+  reward?: number; // Additional reward amount from the pool
+  totalReturn?: number; // Total amount returned (stake + reward)
+  potentialWin?: number; // Potential win at time of bet placement
 }
 
 // User type
