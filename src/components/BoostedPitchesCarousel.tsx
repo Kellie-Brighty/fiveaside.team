@@ -60,10 +60,10 @@ const BoostedPitchesCarousel: React.FC<BoostedPitchesCarouselProps> = ({
       // This will be caught by the PitchesPage component
     };
 
-    window.addEventListener('showPitchDetails', handleShowPitchDetails);
-    
+    window.addEventListener("showPitchDetails", handleShowPitchDetails);
+
     return () => {
-      window.removeEventListener('showPitchDetails', handleShowPitchDetails);
+      window.removeEventListener("showPitchDetails", handleShowPitchDetails);
     };
   }, []);
 
@@ -121,10 +121,21 @@ const BoostedPitchesCarousel: React.FC<BoostedPitchesCarouselProps> = ({
     // Store current pitch data for reference in other pages
     const selectedPitchObj = filteredPitches.find((p) => p.id === pitchId);
     if (selectedPitchObj) {
+      // Ensure customSettings exists with appropriate fallbacks for individual properties
+      const customSettings = {
+        matchDuration: selectedPitchObj.customSettings?.matchDuration ?? 900,
+        maxGoals: selectedPitchObj.customSettings?.maxGoals ?? 7,
+        allowDraws: selectedPitchObj.customSettings?.allowDraws ?? false,
+        maxPlayersPerTeam:
+          selectedPitchObj.customSettings?.maxPlayersPerTeam ?? 5,
+      };
+
       const pitchData = {
         id: pitchId,
         name: selectedPitchObj.name,
         location: selectedPitchObj.location || "",
+        // Include customSettings to ensure maxPlayersPerTeam is available
+        customSettings,
       };
       localStorage.setItem("selectedPitchData", JSON.stringify(pitchData));
     }
@@ -292,13 +303,19 @@ const BoostedPitchesCarousel: React.FC<BoostedPitchesCarouselProps> = ({
                   {/* Action buttons - properly routed and positioned */}
                   <div className="mt-auto pt-2 z-20 relative flex flex-col sm:flex-row gap-2 sm:gap-3">
                     {/* Main button to view pitch details */}
-                    <button 
+                    <button
                       onClick={() => {
                         handlePitchSelect(currentPitch.id);
                         // Display modal with selected pitch details
-                        const pitchDetailsEvent = new CustomEvent('showPitchDetails', {
-                          detail: { pitchId: currentPitch.id, showModal: true }
-                        });
+                        const pitchDetailsEvent = new CustomEvent(
+                          "showPitchDetails",
+                          {
+                            detail: {
+                              pitchId: currentPitch.id,
+                              showModal: true,
+                            },
+                          }
+                        );
                         window.dispatchEvent(pitchDetailsEvent);
                       }}
                       className="relative w-full sm:w-auto flex-1 bg-gradient-to-r from-green-900 to-green-800 hover:from-green-800 hover:to-green-700 text-white font-medium py-2 sm:py-3 px-6 rounded-md transition-all duration-300 flex items-center justify-center group overflow-hidden"

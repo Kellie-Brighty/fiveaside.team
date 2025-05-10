@@ -59,6 +59,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isReferee: boolean;
   isPitchOwner: boolean;
+  isAdmin: boolean;
   userPitches: string[];
   ownedPitches: string[];
   isLoading: boolean;
@@ -70,6 +71,7 @@ interface AuthContextType {
     password: string,
     role: "player" | "referee" | "pitch_owner"
   ) => Promise<void>;
+  adminSignup: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   joinPitch: (pitchId: string) => Promise<void>;
   sessionId: string | null;
@@ -80,6 +82,7 @@ const AuthContext = createContext<AuthContextType>({
   isAuthenticated: false,
   isReferee: false,
   isPitchOwner: false,
+  isAdmin: false,
   userPitches: [],
   ownedPitches: [],
   isLoading: true,
@@ -87,6 +90,7 @@ const AuthContext = createContext<AuthContextType>({
   setSelectedPitchId: () => {},
   login: async () => {},
   signup: async () => {},
+  adminSignup: async () => {},
   logout: async () => {},
   joinPitch: async () => {},
   sessionId: null,
@@ -195,6 +199,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const isAuthenticated = Boolean(currentUser);
   const isReferee = Boolean(currentUser?.role === "referee");
   const isPitchOwner = Boolean(currentUser?.role === "pitch_owner");
+  const isAdmin = Boolean(currentUser?.role === "admin");
   const userPitches = currentUser?.memberOfPitches || [];
   const ownedPitches = currentUser?.ownedPitches || [];
 
@@ -290,6 +295,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const adminSignup = async (email: string, password: string) => {
+    try {
+      const { user: firebaseUser } = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Create admin user document in Firestore
+      const userData: Omit<User, "id"> = {
+        email: firebaseUser.email!,
+        name: "Administrator",
+        role: "admin",
+        balance: 0,
+        bets: [],
+        createdAt: new Date(),
+        memberOfPitches: [],
+        activeSession: {
+          id: sessionId!,
+          lastActive: new Date(),
+          device: navigator.userAgent,
+        },
+      };
+
+      await setDoc(doc(db, "users", firebaseUser.uid), userData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       // If user is logged in, clear their active session first
@@ -347,6 +382,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isAuthenticated,
     isReferee,
     isPitchOwner,
+    isAdmin,
     userPitches,
     ownedPitches,
     isLoading,
@@ -354,6 +390,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setSelectedPitchId: handleSetSelectedPitchId,
     login,
     signup,
+    adminSignup,
     logout,
     joinPitch,
     sessionId,

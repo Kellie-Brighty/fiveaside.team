@@ -125,29 +125,31 @@ const BettingPage: React.FC = () => {
   }, [currentUser, requestSuccess]);
 
   // Handle submitting a request for test funds
-  const submitFundRequest = async () => {
-    if (!currentUser || requestAmount <= 0 || isRequestingFunds) return;
-
-    setIsRequestingFunds(true);
+  const requestFunds = async () => {
+    if (!currentUser) return;
 
     try {
+      setIsRequestingFunds(true);
+
       // Create a new fund request document
       await addDoc(collection(db, "fundRequests"), {
         userId: currentUser.id,
-        userName: currentUser.name,
-        userEmail: currentUser.email,
         amount: requestAmount,
         status: "pending",
         createdAt: serverTimestamp(),
       });
 
-      setRequestSuccess(true);
-      setTimeout(() => {
-        setShowFundsRequestModal(false);
-        setRequestSuccess(false);
-      }, 2000);
+      // Close modal and reset amount
+      setShowFundsRequestModal(false);
+      setRequestAmount(0);
+
+      // Show success message
+      window.toast?.success(
+        "Fund request submitted successfully. Your wallet will be credited within 24 hours."
+      );
     } catch (error) {
-      console.error("Error submitting fund request:", error);
+      console.error("Error requesting funds:", error);
+      window.toast?.error("Failed to submit fund request. Please try again.");
     } finally {
       setIsRequestingFunds(false);
     }
@@ -299,9 +301,16 @@ const BettingPage: React.FC = () => {
       }
 
       try {
-        // Query for user's bets
+        // Query for user's bets from today only
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
         const betsRef = collection(db, "bets");
-        const q = query(betsRef, where("userId", "==", currentUser.id));
+        const q = query(
+          betsRef,
+          where("userId", "==", currentUser.id),
+          where("createdAt", ">=", today)
+        );
 
         const querySnapshot = await getDocs(q);
 
@@ -329,10 +338,10 @@ const BettingPage: React.FC = () => {
             });
           });
 
-          console.log("User bets:", userBets);
+          console.log("User bets (today only):", userBets);
           setBets(userBets);
         } else {
-          console.log("No bets found for user");
+          console.log("No bets found for user today");
           setBets([]);
         }
       } catch (error) {
@@ -341,7 +350,7 @@ const BettingPage: React.FC = () => {
     };
 
     fetchUserBets();
-  }, [currentUser, matches]);
+  }, [currentUser, matches, todayString]);
 
   // Get current active match - update to take the first in-progress match after sorting
   const currentMatch = useMemo(() => {
@@ -1073,7 +1082,7 @@ const BettingPage: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={submitFundRequest}
+                  onClick={requestFunds}
                   disabled={isRequestingFunds}
                   className={`w-full py-3 rounded-lg font-medium text-white ${
                     isRequestingFunds
@@ -1527,7 +1536,7 @@ const BettingPage: React.FC = () => {
           {/* Betting history section */}
           <div className="card rounded-xl overflow-hidden">
             <div className="px-4 pt-4 pb-2 flex justify-between items-center">
-              <h3 className="text-lg font-bold">Your Bets</h3>
+              <h3 className="text-lg font-bold">Today's Bets</h3>
               <span className="text-xs px-2 py-1 bg-dark rounded-full text-gray-400 ml-2">
                 {bets.length} total
               </span>
@@ -1674,9 +1683,9 @@ const BettingPage: React.FC = () => {
                     />
                   </svg>
                 </div>
-                <p className="text-gray-400 mb-1">No bets placed yet</p>
+                <p className="text-gray-400 mb-1">No bets placed today</p>
                 <p className="text-xs text-gray-500">
-                  Your betting history will appear here
+                  Your bets for today will appear here
                 </p>
               </div>
             )}

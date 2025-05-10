@@ -832,6 +832,13 @@ const PitchesPage: React.FC = () => {
         id: pitchId,
         name: selectedPitchObj.name,
         location: selectedPitchObj.location || "",
+        // Include customSettings to ensure maxPlayersPerTeam is available
+        customSettings: selectedPitchObj.customSettings || {
+          matchDuration: 900,
+          maxGoals: 7,
+          allowDraws: false,
+          maxPlayersPerTeam: 5,
+        },
       };
       localStorage.setItem("selectedPitchData", JSON.stringify(pitchData));
       console.log("Stored pitch data in localStorage:", pitchData);

@@ -24,7 +24,7 @@ interface PitchSettings {
   matchDuration: number;
   maxGoals: number;
   allowDraws: boolean;
-  maxPlayersPerTeam: number; // Maximum number of players allowed per team
+  maxPlayersPerTeam?: number; // Maximum number of players allowed per team, now optional to fix linter errors
   customColors?: {
     primary: string;
     secondary: string;
@@ -53,6 +53,7 @@ interface Team {
   pitchId: string;
   createdForDate?: string; // Date in YYYY-MM-DD format
   createdBy?: string; // User ID who created the team
+  maxPlayers?: number; // Maximum number of players allowed in this team (3, 4, or 5-a-side)
 }
 
 interface UserTeamActivity {
@@ -323,6 +324,12 @@ const TeamsPage: React.FC = () => {
     const checkUserTeamActivity = async () => {
       if (!currentUser || !selectedPitch) return;
 
+      console.log("Checking user team activity for:", {
+        userId: currentUser.id,
+        pitchId: selectedPitch,
+        date: todayDateString,
+      });
+
       try {
         setIsLoading(true);
 
@@ -340,34 +347,68 @@ const TeamsPage: React.FC = () => {
         const createdTeamSnapshot = await getDocs(createdTeamQuery);
         let createdTeamId: string | undefined;
 
+        console.log(
+          `Found ${createdTeamSnapshot.size} teams created by the user today`
+        );
+
         if (!createdTeamSnapshot.empty) {
           createdTeamId = createdTeamSnapshot.docs[0].id;
+          console.log("User created team ID:", createdTeamId);
         }
 
-        // Check if user joined a team today
-        const joinedTeamIds: string[] = [];
-        for (const team of teams) {
-          if (
-            team.pitchId === selectedPitch &&
-            team.players.some((player) => player.id === currentUser.id)
-          ) {
-            joinedTeamIds.push(team.id);
+        // Check if user joined a team today by querying for teams where the user is in the players array
+        // Since Firestore can't query into arrays, we need to fetch all teams for this pitch and date
+        // and then filter locally
+        const pitchTeamsQuery = query(
+          teamsRef,
+          where("pitchId", "==", selectedPitch),
+          where("createdForDate", "==", todayDateString)
+        );
+
+        const pitchTeamsSnapshot = await getDocs(pitchTeamsQuery);
+        console.log(
+          `Found ${pitchTeamsSnapshot.size} teams for this pitch today`
+        );
+
+        let joinedTeamId: string | undefined;
+
+        pitchTeamsSnapshot.forEach((doc) => {
+          const teamData = doc.data();
+          const players = teamData.players || [];
+
+          // Check if user is in this team's players
+          if (players.some((player: any) => player.id === currentUser.id)) {
+            joinedTeamId = doc.id;
+            console.log("User is in team ID:", joinedTeamId);
           }
-        }
+        });
 
-        const joinedTeamId =
-          joinedTeamIds.length > 0 ? joinedTeamIds[0] : undefined;
-
-        setUserTeamActivity({
+        // Update activity state with what we found
+        const updatedActivity = {
           createdTeamId,
           joinedTeamId,
           date: todayDateString,
           pitchId: selectedPitch,
-        });
+        };
+
+        console.log("Setting user team activity:", updatedActivity);
+        setUserTeamActivity(updatedActivity);
 
         // Update the teams with the user's created team if it exists
         if (createdTeamId && !teams.some((t) => t.id === createdTeamId)) {
-          const createdTeamData = createdTeamSnapshot.docs[0].data();
+          const createdTeamDoc = createdTeamSnapshot.docs[0];
+          const createdTeamData = createdTeamDoc.data();
+
+          // Handle date conversion properly
+          let createdAtDate: Date;
+          try {
+            // Handle Firestore Timestamp
+            createdAtDate = createdTeamData.createdAt.toDate();
+          } catch (e) {
+            // Fallback for other date formats
+            createdAtDate = new Date(createdTeamData.createdAt);
+          }
+
           const teamToAdd: Team = {
             id: createdTeamId,
             name: createdTeamData.name,
@@ -375,12 +416,14 @@ const TeamsPage: React.FC = () => {
             wins: createdTeamData.wins || 0,
             losses: createdTeamData.losses || 0,
             draws: createdTeamData.draws || 0,
-            createdAt: new Date(createdTeamData.createdAt.toDate()),
+            createdAt: createdAtDate,
             pitchId: createdTeamData.pitchId,
             createdForDate: createdTeamData.createdForDate,
             createdBy: createdTeamData.createdBy,
+            maxPlayers: createdTeamData.maxPlayers,
           };
 
+          console.log("Adding created team to local state:", teamToAdd);
           setTeams((prev) => [...prev, teamToAdd]);
         }
       } catch (error) {
@@ -397,8 +440,16 @@ const TeamsPage: React.FC = () => {
   const fetchTeams = async () => {
     if (!selectedPitch) return;
 
+    console.log(
+      "Fetching teams for pitch:",
+      selectedPitch,
+      "date:",
+      todayDateString
+    );
+
     try {
       setIsLoading(true);
+      setErrorMessage(null);
 
       // First try to fetch from Firebase
       const teamsRef = collection(db, "teams");
@@ -409,31 +460,62 @@ const TeamsPage: React.FC = () => {
       );
 
       const querySnapshot = await getDocs(q);
+      console.log(
+        `Found ${querySnapshot.size} teams in the database for today`
+      );
 
       if (!querySnapshot.empty) {
-        const firebaseTeams: Team[] = querySnapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            id: doc.id,
-            name: data.name,
-            players: data.players || [],
-            wins: data.wins || 0,
-            losses: data.losses || 0,
-            draws: data.draws || 0,
-            createdAt: data.createdAt.toDate(),
-            pitchId: data.pitchId,
-            createdForDate: data.createdForDate,
-            createdBy: data.createdBy,
-          };
-        });
+        const firebaseTeams: Team[] = [];
 
+        for (const doc of querySnapshot.docs) {
+          try {
+            const data = doc.data();
+
+            // Handle date conversion properly
+            let createdAtDate: Date;
+            try {
+              // Handle Firestore Timestamp
+              createdAtDate = data.createdAt.toDate();
+            } catch (e) {
+              console.warn(
+                "Error converting createdAt timestamp for team:",
+                doc.id,
+                e
+              );
+              // Fallback for other date formats
+              createdAtDate = new Date(data.createdAt);
+            }
+
+            const team: Team = {
+              id: doc.id,
+              name: data.name || "Unnamed Team",
+              players: data.players || [],
+              wins: data.wins || 0,
+              losses: data.losses || 0,
+              draws: data.draws || 0,
+              createdAt: createdAtDate,
+              pitchId: data.pitchId,
+              createdForDate: data.createdForDate,
+              createdBy: data.createdBy,
+              maxPlayers: data.maxPlayers,
+            };
+
+            firebaseTeams.push(team);
+          } catch (docError) {
+            console.error("Error processing team document:", doc.id, docError);
+          }
+        }
+
+        console.log("Setting teams in state:", firebaseTeams);
         setTeams(firebaseTeams);
       } else {
+        console.log("No teams found for today, setting empty array");
         // If no teams in Firebase, set an empty array instead of using mock data
         setTeams([]);
       }
     } catch (error) {
       console.error("Error fetching teams:", error);
+      setErrorMessage("Failed to load teams. Please try refreshing the page.");
       // Set empty array instead of using mock data
       setTeams([]);
     } finally {
@@ -465,54 +547,160 @@ const TeamsPage: React.FC = () => {
     }
 
     try {
+      // Instead of relying on local state, fetch the pitch data directly from Firebase
+      let maxPlayersPerTeam: number | undefined = undefined;
+
+      // Only fetch from Firebase if we have a valid pitch ID that's not a mock ID
+      if (selectedPitch && !selectedPitch.startsWith("pitch")) {
+        try {
+          console.log("Fetching fresh pitch data for team creation");
+
+          // Fetch the pitch document directly from Firestore
+          const pitchRef = doc(db, "pitches", selectedPitch);
+          const pitchSnapshot = await getDoc(pitchRef);
+
+          if (pitchSnapshot.exists()) {
+            const pitchData = pitchSnapshot.data();
+            console.log("Firebase pitch data for team creation:", pitchData);
+
+            // Get maxPlayersPerTeam directly from the fetched data
+            maxPlayersPerTeam = pitchData.customSettings?.maxPlayersPerTeam;
+
+            console.log(
+              "Fetched maxPlayersPerTeam directly from Firebase:",
+              maxPlayersPerTeam
+            );
+          } else {
+            console.warn("Pitch not found in Firebase:", selectedPitch);
+          }
+        } catch (error) {
+          console.error("Error fetching pitch data from Firebase:", error);
+        }
+      } else {
+        // Fallback to local state only for mock data
+        const selectedPitchObject = pitches.find((p) => p.id === selectedPitch);
+        maxPlayersPerTeam =
+          selectedPitchObject?.customSettings?.maxPlayersPerTeam;
+      }
+
+      // Display warning if we can't find the maxPlayersPerTeam value
+      if (maxPlayersPerTeam === undefined) {
+        console.warn(
+          "Could not find maxPlayersPerTeam for pitch, using default"
+        );
+        // Default to 5 if no value was found
+        maxPlayersPerTeam = 5;
+      }
+
+      // Log the value we're using to help with debugging
+      console.log("Using maxPlayersPerTeam:", maxPlayersPerTeam);
+
+      // Make sure we create a clean data object for Firestore
+      const currentDate = new Date();
+
+      // Prepare the player object - make sure it's serializable
+      const playerData = {
+        id: currentUser.id,
+        name: currentUser.name || "Anonymous Player",
+        createdAt: currentDate, // Firebase will convert this to a timestamp
+      };
+
+      // Create the team data with maxPlayers always included
       const newTeamData = {
-        name: newTeamName,
-        players: [
-          {
-            id: currentUser.id,
-            name: currentUser.name || "Anonymous Player",
-            createdAt: new Date(),
-          },
-        ],
+        name: newTeamName.trim(),
+        players: [playerData],
         wins: 0,
         losses: 0,
         draws: 0,
-        createdAt: new Date(),
+        createdAt: currentDate, // Firebase will convert this to a timestamp
         pitchId: selectedPitch,
         createdForDate: todayDateString,
         createdBy: currentUser.id,
+        // Always include maxPlayers using the value we fetched directly
+        maxPlayers: maxPlayersPerTeam,
       };
 
       // Add to Firebase
       let newTeamId: string;
       try {
+        // Log specifically the maxPlayers value to confirm it's set
+        console.log("Team maxPlayers value:", newTeamData.maxPlayers);
+        console.log("Saving team data to Firebase:", newTeamData);
         const docRef = await addDoc(collection(db, "teams"), newTeamData);
         newTeamId = docRef.id;
+        console.log("Successfully created team with ID:", newTeamId);
       } catch (error) {
         console.error("Error adding team to Firebase:", error);
-        // Fallback to local ID for demo
-        newTeamId = (teams.length + 1).toString();
+        throw error; // Re-throw to be caught by the outer try/catch
       }
 
+      // Create a complete team object for the local state
       const newTeam: Team = {
         ...newTeamData,
         id: newTeamId,
+        createdAt: currentDate, // Use the same date object for consistency
+        // Use newTeamData.maxPlayers which is guaranteed to be set with a default value
+        maxPlayers: newTeamData.maxPlayers,
+        players: [
+          {
+            // Ensure the player object matches the Player interface
+            id: currentUser.id,
+            name: currentUser.name || "Anonymous Player",
+            createdAt: currentDate,
+          },
+        ],
       };
+
+      console.log(
+        "Adding team to local state with maxPlayers:",
+        newTeam.maxPlayers
+      );
+
+      // Verify maxPlayers is set correctly
+      if (newTeam.maxPlayers === undefined) {
+        console.error(
+          "ERROR: maxPlayers is still undefined in local state object! Using default of 5."
+        );
+        newTeam.maxPlayers = 5; // Force a default as a last resort
+      }
 
       setTeams([...teams, newTeam]);
       setNewTeamName("");
       setShowAddTeamForm(false);
 
       // Update user team activity
-      setUserTeamActivity({
+      const newActivity = {
         createdTeamId: newTeamId,
         joinedTeamId: newTeamId, // Creating a team means you're also in it
         date: todayDateString,
         pitchId: selectedPitch,
-      });
+      };
+      setUserTeamActivity(newActivity);
+
+      // Also update the user's activity in Firebase if needed
+      try {
+        // Check if we have a collection for storing user activities
+        const activitiesRef = collection(db, "userTeamActivities");
+        await addDoc(activitiesRef, {
+          userId: currentUser.id,
+          ...newActivity,
+          createdAt: currentDate,
+        });
+      } catch (activityError) {
+        console.error("Error saving user activity:", activityError);
+        // Don't throw here, as the team was already created
+      }
+
+      // Show success message
+      if (window.toast) {
+        window.toast.success("Team created successfully!");
+      }
     } catch (error) {
       console.error("Error creating team:", error);
       setErrorMessage("Failed to create team. Please try again.");
+      if (window.toast) {
+        window.toast.error("Failed to create team. Please try again.");
+      }
     }
   };
 
@@ -614,6 +802,23 @@ const TeamsPage: React.FC = () => {
             }
           }
 
+          // Use the custom settings from the database without setting defaults
+          // This ensures we preserve the actual maxPlayersPerTeam value
+          const customSettings = data.customSettings
+            ? { ...data.customSettings }
+            : {
+                matchDuration: 900,
+                maxGoals: 7,
+                allowDraws: false,
+                // Do not default maxPlayersPerTeam - if it's not in the database, it should be undefined
+              };
+
+          // Log the maxPlayersPerTeam for debugging
+          console.log(
+            "Retrieved maxPlayersPerTeam from Firebase:",
+            data.customSettings?.maxPlayersPerTeam
+          );
+
           const pitchData: Pitch = {
             id: pitchSnapshot.id,
             name: data.name || "Unknown Pitch",
@@ -621,21 +826,17 @@ const TeamsPage: React.FC = () => {
             description: data.description || "",
             createdAt: createdAtDate,
             referees: data.referees || [],
-            customSettings: data.customSettings || {
-              matchDuration: 900,
-              maxGoals: 7,
-              allowDraws: false,
-              maxPlayersPerTeam: 5,
-            },
+            customSettings: customSettings,
           };
 
           setFirebasePitchData(pitchData);
 
-          // Update localStorage with the real data
+          // Update localStorage with the real data including customSettings
           const storageData = {
             id: pitchData.id,
             name: pitchData.name,
             location: pitchData.location,
+            customSettings: pitchData.customSettings,
           };
           localStorage.setItem(
             "selectedPitchData",
@@ -675,6 +876,7 @@ const TeamsPage: React.FC = () => {
       const storedPitchData = localStorage.getItem("selectedPitchData");
       let pitchName = "Your Selected Pitch";
       let pitchLocation = "From Pitches Page";
+      let maxPlayersPerTeam = undefined; // Don't default to 5
 
       // If we have stored pitch data, use it
       if (storedPitchData) {
@@ -682,6 +884,8 @@ const TeamsPage: React.FC = () => {
           const parsedData = JSON.parse(storedPitchData);
           if (parsedData.name) pitchName = parsedData.name;
           if (parsedData.location) pitchLocation = parsedData.location;
+          if (parsedData.customSettings?.maxPlayersPerTeam)
+            maxPlayersPerTeam = parsedData.customSettings.maxPlayersPerTeam;
           console.log("Using stored pitch data:", parsedData);
         } catch (e) {
           console.error("Error parsing stored pitch data:", e);
@@ -691,7 +895,9 @@ const TeamsPage: React.FC = () => {
       // Create a dynamic pitch object with better values
       console.log(
         "Creating fallback pitch object for Firebase ID:",
-        selectedPitch
+        selectedPitch,
+        "with maxPlayersPerTeam:",
+        maxPlayersPerTeam
       );
       return {
         id: selectedPitch,
@@ -704,7 +910,7 @@ const TeamsPage: React.FC = () => {
           matchDuration: 900,
           maxGoals: 7,
           allowDraws: false,
-          maxPlayersPerTeam: 5,
+          maxPlayersPerTeam: maxPlayersPerTeam, // Don't default to 5, use stored value or undefined
         },
       };
     }
@@ -749,11 +955,14 @@ const TeamsPage: React.FC = () => {
             matchDuration: 900,
             maxGoals: 7,
             allowDraws: false,
-            maxPlayersPerTeam: 5,
+            // maxPlayersPerTeam is now optional, so we can omit it until we get the real value
           },
         };
 
-        console.log("Adding Firebase pitch to mock data:", newPitch);
+        console.log(
+          "Adding Firebase pitch to mock data (needs to be updated with real data):",
+          newPitch
+        );
         setPitches((currentPitches) => [...currentPitches, newPitch]);
       }
     }
@@ -885,9 +1094,18 @@ const TeamsPage: React.FC = () => {
 
   // Check if a team is full based on pitch settings
   const isTeamFull = (team: Team) => {
-    const maxPlayers =
-      selectedPitchObject?.customSettings?.maxPlayersPerTeam || 5;
-    return team.players.length >= maxPlayers;
+    // First try to use the team's own maxPlayers property which should have been set when created
+    if (team.maxPlayers) {
+      return team.players.length >= team.maxPlayers;
+    }
+
+    // If team doesn't have maxPlayers, get it from the pitch
+    const maxPlayers = selectedPitchObject?.customSettings?.maxPlayersPerTeam;
+
+    // If we can't determine the maxPlayers, use 5 as a fallback
+    const effectiveMaxPlayers = maxPlayers !== undefined ? maxPlayers : 5;
+
+    return team.players.length >= effectiveMaxPlayers;
   };
 
   // Check if the current user created this team
@@ -927,6 +1145,7 @@ const TeamsPage: React.FC = () => {
             pitchId: data.pitchId,
             createdForDate: data.createdForDate,
             createdBy: data.createdBy,
+            maxPlayers: data.maxPlayers,
           };
         });
 

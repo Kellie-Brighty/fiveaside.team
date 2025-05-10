@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import type { JSX } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 import Layout from "./components/Layout";
@@ -15,6 +16,25 @@ import ScrollToTop from "./components/ScrollToTop";
 import LoadingScreen from "./components/LoadingScreen";
 import { ToastContainer } from "./components/CustomToast";
 import { initToast } from "./utils/toast";
+import AdminDashboard from "./pages/AdminDashboard";
+import UsersPage from "./pages/admin/UsersPage";
+import FundRequestsPage from "./pages/admin/FundRequestsPage";
+import CreateAdminPage from "./pages/CreateAdminPage";
+
+// RequireAdmin component for protecting admin routes
+const RequireAdmin = ({ children }: { children: JSX.Element }) => {
+  const { currentUser, isAdmin, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (!currentUser || !isAdmin) {
+    return <LoginPage />;
+  }
+
+  return children;
+};
 
 const AppContent: React.FC = () => {
   const { isLoading } = useAuth();
@@ -45,6 +65,22 @@ const AppContent: React.FC = () => {
       <ScrollToTop />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/create-admin" element={<CreateAdminPage />} />
+
+        {/* Admin Routes */}
+        <Route
+          path="/admin"
+          element={
+            <RequireAdmin>
+              <AdminDashboard />
+            </RequireAdmin>
+          }
+        >
+          <Route index element={<UsersPage />} />
+          <Route path="users" element={<UsersPage />} />
+          <Route path="fund-requests" element={<FundRequestsPage />} />
+        </Route>
+
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="pitches" element={<PitchesPage />} />

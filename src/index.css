@@ -149,4 +149,41 @@ h6 {
   .team-card:hover {
     @apply border-primary/30 shadow-lg shadow-primary/10;
   }
+
+  /* Admin dashboard improvements */
+  .admin-table-wrapper {
+    @apply overflow-x-auto -mx-6 px-6;
+  }
+
+  .admin-table {
+    @apply w-full min-w-[800px] divide-y divide-gray-700;
+  }
+
+  .admin-card {
+    @apply bg-dark-lighter rounded-lg p-4 md:p-6 shadow-lg;
+  }
+
+  .admin-sidebar {
+    @apply bg-dark-lighter shadow-lg fixed transition-all duration-300 ease-in-out h-screen left-0 top-0 z-20 overflow-y-auto;
+  }
+
+  .admin-main {
+    @apply transition-all duration-300 ease-in-out h-screen overflow-y-auto;
+  }
+
+  .admin-header {
+    @apply bg-dark-light py-4 px-6 shadow-md flex justify-end md:justify-between items-center sticky top-0 z-10 transition-all duration-300 ease-in-out;
+  }
+
+  /* Fix table scrolling issues on mobile */
+  @media (max-width: 768px) {
+    .admin-table-wrapper {
+      margin-left: -1rem;
+      margin-right: -1rem;
+      padding-left: 1rem;
+      padding-right: 1rem;
+      width: calc(100% + 2rem);
+      overflow-x: auto;
+    }
+  }
 }

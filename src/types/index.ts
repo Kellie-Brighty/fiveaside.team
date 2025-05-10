@@ -76,6 +76,9 @@ export interface Team {
   draws: number;
   createdAt: Date;
   pitchId: string; // Which pitch this team belongs to
+  createdForDate?: string; // Date in YYYY-MM-DD format
+  createdBy?: string; // User ID who created the team
+  maxPlayers?: number; // Maximum number of players allowed in this team (3, 4, or 5-a-side)
 }
 
 // Match type
