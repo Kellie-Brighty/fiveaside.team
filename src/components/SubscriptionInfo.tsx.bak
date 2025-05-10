@@ -1,0 +1,193 @@
+import React from "react";
+import PaystackSubscription from "./PaystackSubscription";
+import { doc, updateDoc, Timestamp } from "firebase/firestore";
+import { db } from "../firebase";
+
+// Define the Pitch interface locally to avoid import issues
+interface Pitch {
+  id: string;
+  name: string;
+  subscriptionData?: {
+    isSubscribed: boolean;
+    subscriptionDate: Date | Timestamp | null;
+    expiryDate: Date | Timestamp | null;
+    transactionRef?: string;
+    lastPaymentDate?: Date | Timestamp | null;
+  };
+  // Add only the fields we need for this component
+}
+
+interface SubscriptionInfoProps {
+  pitch: Pitch;
+  userEmail: string;
+  onSubscriptionUpdate: () => void;
+}
+
+const SubscriptionInfo: React.FC<SubscriptionInfoProps> = ({
+  pitch,
+  userEmail,
+  onSubscriptionUpdate,
+}) => {
+  const isSubscribed = pitch.subscriptionData?.isSubscribed || false;
+
+  // Improved Firebase timestamp handling
+  const expiryDate = (() => {
+    if (!pitch.subscriptionData?.expiryDate) return null;
+
+    const expiry = pitch.subscriptionData.expiryDate;
+
+    // If it's already a Date object
+    if (expiry instanceof Date) return expiry;
+
+    // If it's a Firebase Timestamp
+    if (typeof expiry === "object" && expiry !== null && "toDate" in expiry) {
+      return expiry.toDate();
+    }
+
+    // Fall back to treating it as a date string/number
+    return new Date(expiry as any);
+  })();
+
+  const isExpired = expiryDate ? expiryDate < new Date() : false;
+  const daysRemaining = expiryDate
+    ? Math.max(
+        0,
+        Math.ceil(
+          (expiryDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+        )
+      )
+    : 0;
+
+  const renewalNeeded = daysRemaining <= 7; // Show renewal notice when 7 or fewer days remaining
+
+  const getStatusColor = () => {
+    if (isExpired) return "text-red-500";
+    if (renewalNeeded) return "text-yellow-500";
+    return "text-green-500";
+  };
+
+  const getStatusText = () => {
+    if (isExpired) return "Expired";
+    if (renewalNeeded) return `Expires soon (${daysRemaining} days left)`;
+    return `Active (${daysRemaining} days left)`;
+  };
+
+  const handlePaymentSuccess = async (reference: string) => {
+    // Calculate new expiry date (1 month from now or 1 month from current expiry if not expired)
+    const currentDate = new Date();
+    const baseDate = expiryDate && !isExpired ? expiryDate : currentDate;
+    const newExpiryDate = new Date(baseDate);
+    newExpiryDate.setMonth(newExpiryDate.getMonth() + 1);
+
+    try {
+      // Update the pitch subscription data in Firestore
+      const pitchRef = doc(db, "pitches", pitch.id);
+
+      // Create update object with proper nested structure for Firestore
+      const update: any = {
+        subscriptionData: {
+          isSubscribed: true,
+          expiryDate: newExpiryDate,
+          transactionRef: reference,
+          lastPaymentDate: currentDate,
+        },
+      };
+
+      // Preserve existing subscription date if it exists
+      if (pitch.subscriptionData?.subscriptionDate) {
+        update.subscriptionData.subscriptionDate =
+          pitch.subscriptionData.subscriptionDate;
+      } else {
+        update.subscriptionData.subscriptionDate = currentDate;
+      }
+
+      await updateDoc(pitchRef, update);
+
+      // Call the callback to refresh data
+      onSubscriptionUpdate();
+
+      // Provide feedback to the user
+      window.toast?.success(
+        isSubscribed
+          ? "Subscription renewed successfully!"
+          : "Subscription activated successfully!"
+      );
+    } catch (error) {
+      console.error("Error updating subscription:", error);
+      window.toast?.error(
+        "Failed to update subscription. Please contact support."
+      );
+    }
+  };
+
+  const handlePaymentClose = () => {
+    console.log("Payment closed without completion");
+  };
+
+  return (
+    <div className="bg-dark-lighter rounded-lg p-4 mb-4">
+      <h3 className="text-lg font-semibold mb-2">Pitch Subscription</h3>
+
+      <div className="mb-4">
+        <p className="text-sm text-gray-300 mb-1">
+          Each pitch requires a monthly subscription of ₦5,000 to remain visible
+          on the platform.
+        </p>
+
+        {isSubscribed && (
+          <div className="mt-3">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm text-gray-400">Status:</span>
+              <span className={`text-sm font-medium ${getStatusColor()}`}>
+                {getStatusText()}
+              </span>
+            </div>
+
+            {expiryDate && (
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-gray-400">Expiry Date:</span>
+                <span className="text-sm font-medium">
+                  {expiryDate.toLocaleDateString()}
+                </span>
+              </div>
+            )}
+
+            <div className="h-2 bg-dark rounded-full overflow-hidden mt-2 mb-1">
+              <div
+                className={`h-full ${
+                  isExpired
+                    ? "bg-red-500"
+                    : renewalNeeded
+                    ? "bg-yellow-500"
+                    : "bg-green-500"
+                }`}
+                style={{
+                  width: `${Math.min(100, (daysRemaining / 30) * 100)}%`,
+                }}
+              ></div>
+            </div>
+          </div>
+        )}
+
+        {(!isSubscribed || isExpired || renewalNeeded) && (
+          <div className="mt-4">
+            <PaystackSubscription
+              email={userEmail}
+              onSuccess={handlePaymentSuccess}
+              onClose={handlePaymentClose}
+              isRenewal={isSubscribed}
+            />
+          </div>
+        )}
+
+        <div className="text-xs text-gray-500 mt-2">
+          {isSubscribed
+            ? "You can renew your subscription at any time. Early renewals will extend your current subscription."
+            : "Your pitch will not be visible to users until you activate your subscription."}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default SubscriptionInfo;

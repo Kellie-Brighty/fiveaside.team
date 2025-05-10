@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { Link, useNavigate } from "react-router-dom";
+import {  useNavigate } from "react-router-dom";
 import {
   collection,
   addDoc,
@@ -10,8 +10,10 @@ import {
   query,
   where,
   arrayUnion,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import BoostInfo from "../components/BoostInfo";
 
 // Define types directly to avoid import issues
 interface PitchSettings {
@@ -50,6 +52,14 @@ interface Pitch {
   };
   ownerId: string;
   pricePerPerson?: number; // Price per person in Naira
+  boostData?: {
+    isActive: boolean;
+    boostType: string;
+    startDate: Date;
+    endDate: Date;
+    transactionRef?: string;
+    lastPaymentDate?: Date;
+  };
 }
 
 // Add new interface for player payments
@@ -292,17 +302,50 @@ const LocationPicker: React.FC<{
 };
 
 const PitchesPage: React.FC = () => {
-  const { currentUser, isPitchOwner, joinPitch, setSelectedPitchId } =
+  const navigate = useNavigate();
+  const { currentUser, isPitchOwner, setSelectedPitchId, joinPitch } =
     useAuth();
   const [pitches, setPitches] = useState<Pitch[]>([]);
+  // const [filteredPitches, setFilteredPitches] = useState<Pitch[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedPitch, setSelectedPitch] = useState<Pitch | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<Pitch>>({});
-  const [searchQuery, setSearchQuery] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [selectedPitch, setSelectedPitch] = useState<Pitch | null>(null);
+  // const [activeView, setActiveView] = useState<"grid" | "map">("grid");
+  const [formData, setFormData] = useState<Partial<Pitch>>({
+    name: "",
+    location: "",
+    city: "",
+    state: "",
+    country: "Nigeria",
+    description: "",
+    referees: [],
+    availability: {
+      daysOpen: ["monday", "wednesday", "friday"],
+      openingTime: "09:00",
+      closingTime: "22:00",
+    },
+    customSettings: {
+      matchDuration: 900, // 15 minutes in seconds
+      maxGoals: 7,
+      allowDraws: false,
+      maxPlayersPerTeam: 5,
+    },
+    pricePerPerson: 2000,
+  });
+  const [formReferees, setFormReferees] = useState<
+    { id: string; name: string; email: string }[]
+  >([]);
+  const [refereeEmail, setRefereeEmail] = useState("");
+  const [refereeName, setRefereeName] = useState("");
   const [addingReferee, setAddingReferee] = useState(false);
   const [refereeError, setRefereeError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  // const [showLocationFilter, setShowLocationFilter] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "boost">("details");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [modalPitch, setModalPitch] = useState<Pitch | null>(null); // Add a separate state for modal pitch
 
   // Get user location for new pitches
   const [_userLocation, _setUserLocation] = useState<{
@@ -318,13 +361,6 @@ const PitchesPage: React.FC = () => {
   const [distanceSort, setDistanceSort] = useState<boolean>(false);
   const [cities, setCities] = useState<string[]>([]);
 
-  // Add referee state management
-  const [refereeEmail, setRefereeEmail] = useState("");
-  const [refereeName, setRefereeName] = useState("");
-  const [formReferees, setFormReferees] = useState<
-    Array<{ id: string; name: string; email: string }>
-  >([]);
-
   // In the component, add state for tracking player payments
   const [playersInPitch, setPlayersInPitch] = useState<PlayerPayment[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
@@ -339,8 +375,6 @@ const PitchesPage: React.FC = () => {
     playerName: string;
     newStatus: boolean;
   } | null>(null);
-
-  const navigate = useNavigate();
 
   // Fetch pitches from Firestore
   useEffect(() => {
@@ -380,7 +414,7 @@ const PitchesPage: React.FC = () => {
     };
 
     fetchPitches();
-  }, []);
+  }, [refreshTrigger]);
 
   // Load owned pitches specifically for pitch owners
   useEffect(() => {
@@ -438,7 +472,7 @@ const PitchesPage: React.FC = () => {
     };
 
     loadOwnedPitches();
-  }, [isPitchOwner, currentUser]);
+  }, [isPitchOwner, currentUser, refreshTrigger]);
 
   useEffect(() => {
     // Scroll to top when component mounts
@@ -468,26 +502,41 @@ const PitchesPage: React.FC = () => {
     }
   }, [pitches]);
 
-  const handleSelectPitch = (pitch: Pitch) => {
-    setSelectedPitch(pitch);
-    setFormData(pitch);
-    // Store the selected pitch ID in the context for use in other pages
-    setSelectedPitchId(pitch.id);
-
-    // Check if this pitch is owned by the current user but not yet in their ownedPitches array
-    if (isPitchOwner && currentUser && pitch.ownerId === currentUser.id) {
-      // In a real app, we would update the user's record in Firestore
-      console.log("User is the owner of this pitch");
+  const handleSelectPitch = (pitch: Pitch, showModal = false) => {
+    // Always set modalPitch if showing as a modal
+    if (showModal) {
+      setModalPitch(pitch);
+      setShowDetailsModal(true);
     }
 
-    // In a real app, fetch referee details from API
-    setFormReferees(
-      pitch.referees.map((id, index) => ({
-        id,
-        name: `Referee ${index + 1}`, // Placeholder, would fetch actual names in real app
-        email: `referee${index + 1}@example.com`, // Placeholder, would fetch actual emails in real app
-      }))
-    );
+    // For own pitches or regular selection without modal, we update the main view
+    const isOwnedPitch =
+      isPitchOwner &&
+      currentUser &&
+      (currentUser.id === pitch.ownerId ||
+        currentUser.ownedPitches?.includes(pitch.id));
+
+    // Only update main view if it's not a modal for non-owned pitch
+    if (!showModal || (showModal && isOwnedPitch)) {
+      setSelectedPitch(pitch);
+      setFormData(pitch);
+      setSelectedPitchId(pitch.id);
+
+      // In a real app, fetch referee details from API
+      setFormReferees(
+        pitch.referees.map((id, index) => ({
+          id,
+          name: `Referee ${index + 1}`, // Placeholder, would fetch actual names in real app
+          email: `referee${index + 1}@example.com`, // Placeholder, would fetch actual emails in real app
+        }))
+      );
+
+      // Check if this pitch is owned by the current user but not yet in their ownedPitches array
+      if (isPitchOwner && currentUser && pitch.ownerId === currentUser.id) {
+        // In a real app, we would update the user's record in Firestore
+        console.log("User is the owner of this pitch");
+      }
+    }
   };
 
   const handleEditPitch = () => {
@@ -515,7 +564,7 @@ const PitchesPage: React.FC = () => {
         matchDuration: 900,
         maxGoals: 7,
         allowDraws: false,
-        maxPlayersPerTeam: 5, // Always set to 5 for five-a-side
+        maxPlayersPerTeam: 5,
       },
       availability: {
         daysOpen: [
@@ -627,13 +676,24 @@ const PitchesPage: React.FC = () => {
             p.id === selectedPitch.id ? ({ ...p, ...formData } as Pitch) : p
           )
         );
+
+        setIsEditing(false);
+        setSelectedPitch(null);
+        window.toast?.success("Pitch updated successfully!");
       } else {
-        // Create new pitch
+        // Create new pitch - now without requiring a subscription
         const newPitchData = {
           ...formData,
           createdAt: new Date(),
           ownerId: currentUser?.id,
           referees: formData.referees || [],
+          // Initialize boost data as inactive
+          boostData: {
+            isActive: false,
+            boostType: "",
+            startDate: null,
+            endDate: null,
+          },
         };
 
         const docRef = await addDoc(collection(db, "pitches"), newPitchData);
@@ -647,13 +707,21 @@ const PitchesPage: React.FC = () => {
 
         // Update user's ownedPitches array
         await updateUserOwnedPitches(docRef.id);
-      }
 
-      setIsEditing(false);
-      setSelectedPitch(null);
+        setIsEditing(false);
+
+        // Show success message
+        window.toast?.success(
+          "Pitch created successfully! You can now boost it for more visibility."
+        );
+
+        // Set this new pitch as selected so we can show the boost section
+        setSelectedPitch(newPitch);
+        setActiveTab("boost");
+      }
     } catch (error) {
       console.error("Error saving pitch:", error);
-      alert("Failed to save pitch. Please try again.");
+      window.toast?.error("Failed to save pitch. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -689,6 +757,9 @@ const PitchesPage: React.FC = () => {
 
     // Call the joinPitch function to update the user's joined pitches
     joinPitch(pitchId);
+
+    // Navigate to the teams page
+    navigate("/teams");
   };
 
   // Calculate distance between two coordinates in kilometers
@@ -709,6 +780,52 @@ const PitchesPage: React.FC = () => {
         Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
+  };
+
+  // Refresh boost data
+  const refreshBoost = () => {
+    // Refresh the pitches data to get updated boost info
+    setRefreshTrigger((prev) => prev + 1);
+
+    // Reload this pitch's data
+    if (selectedPitch) {
+      const pitchId = selectedPitch.id;
+      const fetchUpdatedPitch = async () => {
+        try {
+          const pitchRef = doc(db, "pitches", pitchId);
+          const pitchDoc = await getDoc(pitchRef);
+
+          if (pitchDoc.exists()) {
+            const data = pitchDoc.data();
+
+            // Convert Firestore timestamps to Date safely
+            let createdAtDate = new Date();
+            if (data.createdAt) {
+              if (typeof data.createdAt.toDate === "function") {
+                createdAtDate = data.createdAt.toDate();
+              } else if (data.createdAt instanceof Date) {
+                createdAtDate = data.createdAt;
+              } else {
+                createdAtDate = new Date(data.createdAt);
+              }
+            }
+
+            const updatedPitch = {
+              id: pitchDoc.id,
+              ...data,
+              createdAt: createdAtDate,
+              city: data.city || "",
+            } as Pitch;
+
+            setSelectedPitch(updatedPitch);
+          }
+        } catch (error) {
+          console.error("Error fetching updated pitch:", error);
+        }
+      };
+
+      fetchUpdatedPitch();
+    }
   };
 
   // Search for referee by email
@@ -848,13 +965,27 @@ const PitchesPage: React.FC = () => {
   const myOwnedPitches = useMemo(() => {
     if (!isPitchOwner || !currentUser) return [];
 
-    return pitches.filter(
+    const ownedPitches = pitches.filter(
       (pitch) =>
         // Either in the user's ownedPitches array or has matching ownerId
         currentUser.ownedPitches?.includes(pitch.id) ||
         pitch.ownerId === currentUser.id
     );
-  }, [pitches, currentUser, isPitchOwner]);
+
+    // Filter owned pitches based on search query if one exists
+    if (searchQuery) {
+      return ownedPitches.filter(
+        (pitch) =>
+          pitch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (pitch.location &&
+            pitch.location.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (pitch.city &&
+            pitch.city.toLowerCase().includes(searchQuery.toLowerCase()))
+      );
+    }
+
+    return ownedPitches;
+  }, [pitches, currentUser, isPitchOwner, searchQuery]);
 
   // Non-owned pitches
   // const otherPitches =
@@ -1229,6 +1360,73 @@ const PitchesPage: React.FC = () => {
     }));
   };
 
+  // Render the boost tab content
+  const renderBoostSection = () => {
+    if (!isPitchOwner || !selectedPitch || !currentUser) return null;
+
+    return (
+      <div className="mb-8">
+        <div className="flex justify-between items-start mb-6">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold mb-2">
+              Boost Your Pitch
+            </h2>
+            <p className="text-gray-400 text-sm">
+              Increase visibility and attract more players to your pitch
+            </p>
+          </div>
+        </div>
+
+        <BoostInfo
+          pitch={selectedPitch}
+          userEmail={currentUser.email}
+          onBoostUpdate={refreshBoost}
+        />
+
+        <div className="mt-8 p-4 bg-dark-lighter rounded-lg border border-yellow-500/20">
+          <div className="flex items-start">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+            <div>
+              <h3 className="font-medium text-yellow-500 mb-1">
+                Boost Information
+              </h3>
+              <p className="text-sm text-gray-300 mb-2">
+                Boosting your pitch increases its visibility on the platform.
+              </p>
+              <ul className="text-xs text-gray-400 space-y-1 list-disc pl-4">
+                <li>
+                  Your pitch is visible in normal searches within its registered
+                  location
+                </li>
+                <li>
+                  Boost your pitch for broader visibility beyond the local area
+                </li>
+                <li>Higher boost tiers provide greater reach and duration</li>
+                <li>
+                  Boosted pitches appear higher in search results and
+                  recommended lists
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {loading ? (
@@ -1263,6 +1461,33 @@ const PitchesPage: React.FC = () => {
                 </button>
               </div>
 
+              {/* Add search bar for pitch owners */}
+              <div className="bg-dark-lighter rounded-lg p-4 mb-6">
+                <div className="relative">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5 absolute left-3 top-2.5 text-gray-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search your pitches by name or location"
+                    className="w-full bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-green-500"
+                  />
+                </div>
+              </div>
+
               {myOwnedPitches.length > 0 ? (
                 <div className="bg-dark-light/20 rounded-lg p-4 sm:p-6 mb-8">
                   <h2 className="text-xl font-bold text-white mb-4">
@@ -1277,7 +1502,7 @@ const PitchesPage: React.FC = () => {
                             ? "border-green-500"
                             : "border-green-500/30"
                         } rounded-lg overflow-hidden cursor-pointer hover:bg-dark-light/60 transition-all`}
-                        onClick={() => handleSelectPitch(pitch)}
+                        onClick={() => handleSelectPitch(pitch, false)}
                       >
                         <div className="p-4">
                           <h3 className="font-bold text-lg text-white">
@@ -1361,354 +1586,55 @@ const PitchesPage: React.FC = () => {
                     {selectedPitch.description}
                   </p>
 
-                  {/* Add location map view */}
-                  {selectedPitch.coordinates && (
-                    <div className="mb-6">
-                      <h3 className="font-semibold mb-3 text-gray-300">
-                        Location
-                      </h3>
-                      <div className="bg-dark rounded-lg overflow-hidden">
-                        <LocationPicker
-                          coordinates={selectedPitch.coordinates}
-                          onLocationSelected={() => {}}
-                          readOnly={true}
-                        />
-                      </div>
-                      <div className="mt-2 text-sm text-gray-400 flex items-center">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-4 w-4 mr-1 text-gray-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                          />
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                          />
-                        </svg>
-                        {selectedPitch.address}, {selectedPitch.city},{" "}
-                        {selectedPitch.state}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                    <div className="bg-dark p-4 rounded-lg">
-                      <h3 className="font-semibold mb-2 text-gray-300">
-                        Match Settings
-                      </h3>
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Match Duration:</span>
-                          <span>
-                            {selectedPitch.customSettings?.matchDuration
-                              ? selectedPitch.customSettings.matchDuration / 60
-                              : 15}{" "}
-                            minutes
-                          </span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Max Goals:</span>
-                          <span>
-                            {selectedPitch.customSettings?.maxGoals || 7} goals
-                          </span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Draws Allowed:</span>
-                          <span>
-                            {selectedPitch.customSettings?.allowDraws
-                              ? "Yes"
-                              : "No"}
-                          </span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Team Size:</span>
-                          <span>
-                            {selectedPitch.customSettings?.maxPlayersPerTeam ||
-                              5}
-                            -a-side
-                          </span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Price:</span>
-                          <span className="font-semibold text-primary">
-                            ₦
-                            {selectedPitch.pricePerPerson?.toLocaleString() ||
-                              "2,000"}
-                            /person
-                          </span>
-                        </li>
-                      </ul>
-                    </div>
-                    <div className="bg-dark p-4 rounded-lg">
-                      <h3 className="font-semibold mb-2 text-gray-300">
-                        Pitch Info
-                      </h3>
-                      <ul className="space-y-2 text-sm">
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Surface:</span>
-                          <span>Artificial Turf</span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Indoor/Outdoor:</span>
-                          <span>
-                            {selectedPitch.name.includes("Indoor")
-                              ? "Indoor"
-                              : "Outdoor"}
-                          </span>
-                        </li>
-                        <li className="flex justify-between">
-                          <span className="text-gray-400">Changing Rooms:</span>
-                          <span>Available</span>
-                        </li>
-                      </ul>
-                    </div>
-                  </div>
-
-                  {/* Referees Section */}
-                  <div className="bg-dark p-4 rounded-lg mb-6">
-                    <h3 className="font-semibold mb-2 text-gray-300">
-                      Referees
-                    </h3>
-                    {selectedPitch.referees &&
-                    selectedPitch.referees.length > 0 ? (
-                      <ul className="space-y-1 text-sm">
-                        {selectedPitch.referees.map((refereeId) => (
-                          <li
-                            key={refereeId}
-                            className="flex items-center text-gray-300"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-4 w-4 mr-2 text-green-500"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path
-                                fillRule="evenodd"
-                                d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z"
-                                clipRule="evenodd"
-                              />
-                            </svg>
-                            Referee (ID: {refereeId.substring(0, 8)})
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-sm text-gray-400">
-                        No referees assigned yet
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
-                    {isPitchOwner &&
+                  {/* Tabs for pitch owner */}
+                  {isPitchOwner &&
                     (currentUser?.ownedPitches?.includes(selectedPitch.id) ||
-                      selectedPitch.ownerId === currentUser?.id) ? (
-                      <button
-                        onClick={handleEditPitch}
-                        className="btn-primary flex-1 py-2.5"
-                      >
-                        Edit Pitch
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => {
-                            handleJoinPitch(selectedPitch.id);
-                            setSelectedPitch(null);
-                          }}
-                          className="bg-dark hover:bg-dark-light text-white text-center py-2.5 rounded-lg flex-1"
-                        >
-                          Join This Pitch
-                        </button>
-                        <Link
-                          to="/teams"
-                          className="bg-primary hover:bg-primary/90 text-white text-center py-2.5 rounded-lg flex-1"
-                          onClick={(e) => {
-                            e.preventDefault(); // Prevent default to handle navigation manually
-                            console.log(
-                              "Create a Team clicked for pitch:",
-                              selectedPitch.id
-                            );
-
-                            // First set the selected pitch ID
-                            handleJoinPitch(selectedPitch.id);
-
-                            // Short delay to ensure the context is updated before navigation
-                            setTimeout(() => {
-                              console.log(
-                                "Navigating to /teams with selected pitch:",
-                                localStorage.getItem("selectedPitchId")
-                              );
-                              navigate("/teams");
-                            }, 100);
-                          }}
-                        >
-                          Create a Team
-                        </Link>
-                      </>
+                      selectedPitch.ownerId === currentUser?.id) && (
+                      <div className="mb-6">
+                        <div className="flex border-b border-gray-700 mb-6">
+                          <button
+                            className={`px-4 py-2 text-sm font-medium ${
+                              activeTab === "details"
+                                ? "border-b-2 border-primary text-primary"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                            onClick={() => setActiveTab("details")}
+                          >
+                            Pitch Details
+                          </button>
+                          <button
+                            className={`px-4 py-2 text-sm font-medium ${
+                              activeTab === "boost"
+                                ? "border-b-2 border-primary text-primary"
+                                : "text-gray-400 hover:text-white"
+                            }`}
+                            onClick={() => setActiveTab("boost")}
+                          >
+                            Boost Pitch
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
-              )}
 
-              {/* Render payment tracking section */}
-              {renderPaymentTrackingSection()}
-
-              <h2 className="text-xl font-bold text-white mb-4">
-                Other Pitches
-              </h2>
-            </div>
-          ) : null}
-
-          {/* Always show pitch-finding and team-creation UI for all users, including pitch owners */}
-          <div>
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-bold sport-gradient-text mb-2">
-                  Find Pitches to Play Today
-                </h1>
-                <p className="text-gray-400 text-sm">
-                  Browse available five-a-side pitches and join a team or create
-                  your own
-                </p>
-              </div>
-            </div>
-
-            {/* Search and Filters */}
-            <div className="bg-dark-lighter p-4 sm:p-5 rounded-xl mb-8">
-              <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-                <div className="flex-grow">
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Search
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Search pitches by name or location"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 w-full focus:outline-none focus:border-primary"
-                    />
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      />
-                    </svg>
-                  </div>
-                </div>
-
-                <div className="w-full md:w-1/4">
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    City
-                  </label>
-                  <select
-                    value={cityFilter}
-                    onChange={(e) => setCityFilter(e.target.value)}
-                    className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary appearance-none"
-                  >
-                    <option value="">All Cities</option>
-                    {cities.map((city) => (
-                      <option key={city} value={city}>
-                        {city}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {userCoordinates && (
-                  <div className="flex items-center mt-4 md:mt-0">
-                    <label className="flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={distanceSort}
-                        onChange={() => setDistanceSort(!distanceSort)}
-                        className="sr-only"
-                      />
-                      <span
-                        className={`w-10 h-5 ${
-                          distanceSort ? "bg-primary" : "bg-gray-700"
-                        } rounded-full relative transition-colors duration-200 ease-in-out mr-2`}
-                      >
-                        <span
-                          className={`absolute left-0.5 top-0.5 bg-white w-4 h-4 rounded-full transition-transform duration-200 ease-in-out ${
-                            distanceSort ? "translate-x-5" : "translate-x-0"
-                          }`}
-                        ></span>
-                      </span>
-                      <span className="text-sm text-gray-300">
-                        Sort by Distance
-                      </span>
-                    </label>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="mb-8">
-              <h2 className="text-xl font-bold mb-4 flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2 text-primary"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                Pitches Near You
-              </h2>
-
-              {getFilteredPitches().length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {getFilteredPitches().map((pitch) => {
-                    // Calculate distance if user coordinates available
-                    let distance = null;
-                    if (userCoordinates && pitch.coordinates) {
-                      distance = calculateDistance(
-                        userCoordinates.latitude,
-                        userCoordinates.longitude,
-                        pitch.coordinates.latitude,
-                        pitch.coordinates.longitude
-                      );
-                    }
-
-                    return (
-                      <div
-                        key={pitch.id}
-                        className="bg-dark-lighter hover:bg-dark-lighter/80 transition-colors duration-200 rounded-lg overflow-hidden border border-gray-700 hover:border-primary/30"
-                      >
-                        <div className="p-5">
-                          <div className="flex justify-between items-start mb-3">
-                            <h3 className="font-bold text-lg">{pitch.name}</h3>
-                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full">
-                              Available
-                            </span>
+                  {/* Tab content */}
+                  {activeTab === "boost" && isPitchOwner ? (
+                    renderBoostSection()
+                  ) : (
+                    <>
+                      {/* Location map view */}
+                      {selectedPitch.coordinates && (
+                        <div className="mb-6">
+                          <h3 className="font-semibold mb-3 text-gray-300">
+                            Location
+                          </h3>
+                          <div className="bg-dark rounded-lg overflow-hidden">
+                            <LocationPicker
+                              coordinates={selectedPitch.coordinates}
+                              onLocationSelected={() => {}}
+                              readOnly={true}
+                            />
                           </div>
-
-                          <div className="flex items-center text-gray-400 text-sm mb-3">
+                          <div className="mt-2 text-sm text-gray-400 flex items-center">
                             <svg
                               xmlns="http://www.w3.org/2000/svg"
                               className="h-4 w-4 mr-1 text-gray-500"
@@ -1729,143 +1655,1113 @@ const PitchesPage: React.FC = () => {
                                 d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                               />
                             </svg>
-                            {pitch.city}
-                            {pitch.state ? `, ${pitch.state}` : ""}
-
-                            {distance !== null && (
-                              <span className="ml-2 text-xs bg-dark py-0.5 px-1.5 rounded-full">
-                                {distance.toFixed(1)} km
-                              </span>
-                            )}
+                            {selectedPitch.address}, {selectedPitch.city},{" "}
+                            {selectedPitch.state}
                           </div>
+                        </div>
+                      )}
 
-                          <p className="text-gray-500 text-xs mb-4 line-clamp-2">
-                            {pitch.description}
-                          </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"></div>
 
-                          <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3 w-3 mr-1"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                              </svg>
-                              {pitch.customSettings?.matchDuration
-                                ? pitch.customSettings.matchDuration / 60
-                                : 15}{" "}
-                              min
-                            </span>
-                            <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3 w-3 mr-1"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                                />
-                              </svg>
-                              {pitch.customSettings?.maxPlayersPerTeam || 5}
-                              -a-side
-                            </span>
-                            {pitch.availability && (
-                              <span className="px-2 py-1 bg-dark rounded-md text-xs text-gray-300 flex items-center">
-                                <svg
-                                  xmlns="http://www.w3.org/2000/svg"
-                                  className="h-3 w-3 mr-1"
-                                  fill="none"
-                                  viewBox="0 0 24 24"
-                                  stroke="currentColor"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth={2}
-                                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  />
-                                </svg>
-                                Open today
-                              </span>
-                            )}
-                            <span className="px-2 py-1 bg-primary/20 rounded-md text-xs text-primary flex items-center">
-                              <svg
-                                xmlns="http://www.w3.org/2000/svg"
-                                className="h-3 w-3 mr-1"
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                />
-                              </svg>
-                              ₦
-                              {pitch.pricePerPerson?.toLocaleString() ||
-                                "2,000"}
-                              /person
-                            </span>
-                          </div>
+                      {/* Payment Tracking for pitch owners */}
+                      {isPitchOwner && renderPaymentTrackingSection()}
 
-                          <div className="flex justify-between items-center pt-3 border-t border-gray-700">
+                      {/* Edit button for pitch owners */}
+                      {isPitchOwner &&
+                        currentUser &&
+                        (currentUser.id === selectedPitch.ownerId ||
+                          currentUser.ownedPitches?.includes(
+                            selectedPitch.id
+                          )) && (
+                          <div className="mt-6 flex gap-3">
                             <button
-                              onClick={() => handleSelectPitch(pitch)}
-                              className="text-sm text-gray-400 hover:text-white"
+                              onClick={handleEditPitch}
+                              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center"
                             >
-                              View Details
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 mr-2"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                              </svg>
+                              Edit Pitch
                             </button>
-                            <Link
-                              to="/teams"
-                              className="btn-primary text-sm py-1.5 px-4"
-                              onClick={(e) => {
-                                e.preventDefault(); // Prevent default to handle navigation manually
-                                console.log(
-                                  "Play Here clicked for pitch:",
-                                  pitch.id
-                                );
 
-                                // First set the selected pitch ID
-                                handleJoinPitch(pitch.id);
-
-                                // Short delay to ensure the context is updated before navigation
-                                setTimeout(() => {
-                                  console.log(
-                                    "Navigating to /teams with selected pitch:",
-                                    localStorage.getItem("selectedPitchId")
-                                  );
-                                  navigate("/teams");
-                                }, 100);
-                              }}
+                            <button
+                              onClick={() => handleJoinPitch(selectedPitch.id)}
+                              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-md flex items-center"
                             >
-                              Play Here
-                            </Link>
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5 mr-2"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z" />
+                              </svg>
+                              Play at This Pitch
+                            </button>
+                          </div>
+                        )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Add pitch form - displayed when isEditing is true */}
+              {isEditing && (
+                <div className="bg-dark-lighter rounded-lg p-4 sm:p-6 mb-8">
+                  <div className="flex justify-between items-start mb-4">
+                    <h2 className="text-xl sm:text-2xl font-bold mb-1">
+                      {selectedPitch ? "Edit Pitch" : "Register New Pitch"}
+                    </h2>
+                    <button
+                      onClick={handleCancel}
+                      className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-5 w-5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M6 18L18 6M6 6l12 12"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleSubmit} className="space-y-6">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Pitch Name*
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name || ""}
+                          onChange={handleChange}
+                          className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                          placeholder="Enter your pitch name"
+                          required
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Location*
+                          </label>
+                          <input
+                            type="text"
+                            name="location"
+                            value={formData.location || ""}
+                            onChange={handleChange}
+                            className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                            placeholder="Neighborhood/Area"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Address
+                          </label>
+                          <input
+                            type="text"
+                            name="address"
+                            value={formData.address || ""}
+                            onChange={handleChange}
+                            className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                            placeholder="Street Address"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            City*
+                          </label>
+                          <input
+                            type="text"
+                            name="city"
+                            value={formData.city || ""}
+                            onChange={handleChange}
+                            className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                            placeholder="City"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            State
+                          </label>
+                          <input
+                            type="text"
+                            name="state"
+                            value={formData.state || ""}
+                            onChange={handleChange}
+                            className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                            placeholder="State"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-1">
+                            Country
+                          </label>
+                          <input
+                            type="text"
+                            name="country"
+                            value={formData.country || "Nigeria"}
+                            onChange={handleChange}
+                            className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                            readOnly
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Description
+                        </label>
+                        <textarea
+                          name="description"
+                          value={formData.description || ""}
+                          onChange={handleChange}
+                          rows={3}
+                          className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                          placeholder="Tell us about your pitch..."
+                        ></textarea>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Price per Person (₦)
+                        </label>
+                        <input
+                          type="number"
+                          name="pricePerPerson"
+                          value={formData.pricePerPerson || 2000}
+                          onChange={handleChange}
+                          min="500"
+                          className="w-full bg-dark border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                          placeholder="e.g. 2000"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          This is the amount each player will pay to play at
+                          your pitch
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Location Picker
+                        </label>
+                        <LocationPicker
+                          coordinates={formData.coordinates}
+                          onLocationSelected={handleLocationSelected}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Click "Use My Location" or click on the map to set
+                          your pitch's location
+                        </p>
+                      </div>
+
+                      <div>
+                        <h3 className="text-md font-medium text-gray-300 mb-2">
+                          Pitch Settings
+                        </h3>
+                        <div className="bg-dark rounded-lg p-4 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Match Duration (seconds)
+                              </label>
+                              <input
+                                type="number"
+                                name="matchDuration"
+                                value={
+                                  formData.customSettings?.matchDuration || 900
+                                }
+                                onChange={handleSettingsChange}
+                                min="300"
+                                max="3600"
+                                className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                              />
+                              <p className="text-xs text-gray-500 mt-1">
+                                {Math.floor(
+                                  (formData.customSettings?.matchDuration ||
+                                    900) / 60
+                                )}{" "}
+                                minutes
+                              </p>
+                            </div>
+
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Max Goals
+                              </label>
+                              <input
+                                type="number"
+                                name="maxGoals"
+                                value={formData.customSettings?.maxGoals || 7}
+                                onChange={handleSettingsChange}
+                                min="1"
+                                max="99"
+                                className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Players Per Team
+                              </label>
+                              <select
+                                name="maxPlayersPerTeam"
+                                value={
+                                  formData.customSettings?.maxPlayersPerTeam ||
+                                  5
+                                }
+                                onChange={handleSettingsChange}
+                                className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                              >
+                                <option value="3">3-a-side</option>
+                                <option value="4">4-a-side</option>
+                                <option value="5">5-a-side</option>
+                              </select>
+                            </div>
+
+                            <div className="flex items-center h-full pt-6">
+                              <input
+                                type="checkbox"
+                                id="allowDraws"
+                                name="allowDraws"
+                                checked={
+                                  formData.customSettings?.allowDraws || false
+                                }
+                                onChange={handleSettingsChange}
+                                className="h-4 w-4 text-green-500 rounded border-gray-700 focus:ring-green-500 bg-dark-light"
+                              />
+                              <label
+                                htmlFor="allowDraws"
+                                className="ml-2 text-sm text-gray-300"
+                              >
+                                Allow Draws (or require winner)
+                              </label>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    );
-                  })}
+
+                      <div>
+                        <h3 className="text-md font-medium text-gray-300 mb-2">
+                          Referees
+                        </h3>
+                        <div className="bg-dark rounded-lg p-4">
+                          <div className="mb-4">
+                            <div className="grid grid-cols-3 gap-2">
+                              <div className="col-span-1">
+                                <input
+                                  type="text"
+                                  value={refereeName}
+                                  onChange={(e) =>
+                                    setRefereeName(e.target.value)
+                                  }
+                                  className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                                  placeholder="Name"
+                                />
+                              </div>
+                              <div className="col-span-1">
+                                <input
+                                  type="email"
+                                  value={refereeEmail}
+                                  onChange={(e) =>
+                                    setRefereeEmail(e.target.value)
+                                  }
+                                  className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white placeholder-gray-500"
+                                  placeholder="Email"
+                                />
+                              </div>
+                              <div>
+                                <button
+                                  type="button"
+                                  onClick={handleAddReferee}
+                                  disabled={
+                                    !refereeEmail ||
+                                    !refereeName ||
+                                    addingReferee
+                                  }
+                                  className={`w-full rounded-md px-3 py-2 text-white ${
+                                    !refereeEmail ||
+                                    !refereeName ||
+                                    addingReferee
+                                      ? "bg-gray-700 cursor-not-allowed"
+                                      : "bg-green-600 hover:bg-green-700"
+                                  }`}
+                                >
+                                  {addingReferee ? (
+                                    <span className="flex items-center justify-center">
+                                      <svg
+                                        className="animate-spin h-4 w-4 mr-2"
+                                        viewBox="0 0 24 24"
+                                      >
+                                        <circle
+                                          className="opacity-25"
+                                          cx="12"
+                                          cy="12"
+                                          r="10"
+                                          stroke="currentColor"
+                                          strokeWidth="4"
+                                        ></circle>
+                                        <path
+                                          className="opacity-75"
+                                          fill="currentColor"
+                                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                        ></path>
+                                      </svg>
+                                      Adding...
+                                    </span>
+                                  ) : (
+                                    "Add Referee"
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                            {refereeError && (
+                              <p className="text-yellow-500 text-xs mt-1">
+                                {refereeError}
+                              </p>
+                            )}
+                          </div>
+
+                          {formReferees.length > 0 ? (
+                            <ul className="divide-y divide-gray-700">
+                              {formReferees.map((referee) => (
+                                <li
+                                  key={referee.id}
+                                  className="py-2 flex justify-between items-center"
+                                >
+                                  <div>
+                                    <p className="font-medium text-sm">
+                                      {referee.name}
+                                    </p>
+                                    <p className="text-gray-400 text-xs">
+                                      {referee.email}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleRemoveReferee(referee.id)
+                                    }
+                                    className="text-red-400 hover:text-red-300"
+                                  >
+                                    <svg
+                                      xmlns="http://www.w3.org/2000/svg"
+                                      className="h-5 w-5"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                      />
+                                    </svg>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            <p className="text-gray-500 text-sm">
+                              No referees added yet
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-3">
+                      <button
+                        type="button"
+                        onClick={handleCancel}
+                        className="px-4 py-2 bg-dark-light text-white rounded-md hover:bg-dark-light/80"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className={`px-6 py-2 rounded-md text-white ${
+                          submitting
+                            ? "bg-green-700 cursor-not-allowed"
+                            : "bg-green-600 hover:bg-green-700"
+                        }`}
+                      >
+                        {submitting ? (
+                          <span className="flex items-center">
+                            <svg
+                              className="animate-spin h-4 w-4 mr-2"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              ></circle>
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                              ></path>
+                            </svg>
+                            Saving...
+                          </span>
+                        ) : selectedPitch ? (
+                          "Update Pitch"
+                        ) : (
+                          "Create Pitch"
+                        )}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              ) : (
-                <div className="text-center bg-dark-lighter p-8 rounded-lg border border-gray-700">
+              )}
+
+              {/* Confirmation modal for payment actions */}
+              {showConfirmModal && confirmAction && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
+                  <div className="bg-dark-lighter rounded-lg p-6 max-w-sm w-full">
+                    <h3 className="text-lg font-bold mb-2">Confirm Action</h3>
+                    <p className="text-gray-300 mb-4">
+                      {confirmAction.type === "payment"
+                        ? `Are you sure you want to mark ${
+                            confirmAction.playerName
+                          } as ${confirmAction.newStatus ? "paid" : "unpaid"}?`
+                        : `Are you sure you want to ${
+                            confirmAction.newStatus
+                              ? "exempt"
+                              : "remove exemption for"
+                          } ${confirmAction.playerName}?`}
+                    </p>
+                    <div className="flex justify-end space-x-3">
+                      <button
+                        onClick={() => setShowConfirmModal(false)}
+                        className="px-4 py-2 bg-gray-700 text-white rounded-md hover:bg-gray-600"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleConfirmAction}
+                        className={`px-4 py-2 text-white rounded-md ${
+                          confirmAction.type === "payment"
+                            ? confirmAction.newStatus
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-yellow-600 hover:bg-yellow-700"
+                            : confirmAction.newStatus
+                            ? "bg-blue-600 hover:bg-blue-700"
+                            : "bg-gray-600 hover:bg-gray-700"
+                        }`}
+                      >
+                        Confirm
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Find pitches section for pitch owners */}
+              <div className="mt-12 border-t border-gray-700 pt-10">
+                <h2 className="text-2xl font-bold text-purple-500 mb-4">
+                  Find Other Pitches to Play At
+                </h2>
+                <p className="text-gray-400 mb-6">
+                  Browse available five-a-side pitches to join as a player
+                </p>
+
+                <div className="bg-dark-lighter rounded-lg p-4 mb-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2">
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                          Search
+                        </label>
+                        <div className="relative">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5 absolute left-3 top-2.5 text-gray-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search pitches by name or location"
+                            className="w-full bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                          City
+                        </label>
+                        <select
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">All Cities</option>
+                          {cities.map((city) => (
+                            <option key={city} value={city}>
+                              {city}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end mt-2">
+                    <div className="flex items-center">
+                      <span className="text-gray-400 mr-2">
+                        Sort by Distance
+                      </span>
+                      <div className="relative inline-block w-10 mr-2 align-middle select-none">
+                        <input
+                          type="checkbox"
+                          id="distanceSortOwner"
+                          checked={distanceSort}
+                          onChange={() => setDistanceSort(!distanceSort)}
+                          className="checked:bg-purple-500 outline-none focus:outline-none right-4 checked:right-0 duration-200 ease-in absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-700 appearance-none cursor-pointer"
+                        />
+                        <label
+                          htmlFor="distanceSortOwner"
+                          className={`block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer ${
+                            distanceSort ? "bg-purple-700" : "bg-gray-700"
+                          }`}
+                        ></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex items-center mb-4">
+                    <svg
+                      className="w-5 h-5 text-purple-500 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <h2 className="text-xl font-bold">Available Pitches</h2>
+                  </div>
+
+                  {getFilteredPitches().length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {getFilteredPitches()
+                        .filter(
+                          (pitch) =>
+                            !myOwnedPitches.some(
+                              (ownedPitch) => ownedPitch.id === pitch.id
+                            )
+                        )
+                        .map((pitch) => {
+                          // Calculate distance if we have user coordinates
+                          let distance = null;
+                          if (userCoordinates && pitch.coordinates) {
+                            distance = calculateDistance(
+                              userCoordinates.latitude,
+                              userCoordinates.longitude,
+                              pitch.coordinates.latitude,
+                              pitch.coordinates.longitude
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={pitch.id}
+                              className="bg-dark-lighter rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300"
+                            >
+                              <div className="p-4">
+                                <div className="mb-3">
+                                  <h3 className="font-bold text-lg text-white mb-1 line-clamp-1">
+                                    {pitch.name}
+                                  </h3>
+                                  <div className="flex items-center text-sm text-gray-400 flex-wrap">
+                                    <svg
+                                      className="w-4 h-4 mr-1 flex-shrink-0"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                      />
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                      />
+                                    </svg>
+                                    <span className="truncate max-w-[120px] mr-1">
+                                      {pitch.location},
+                                    </span>
+                                    <span className="truncate max-w-[80px]">
+                                      {pitch.city}
+                                    </span>
+                                    {distance !== null && (
+                                      <span className="ml-2 text-xs bg-dark-light/40 px-1.5 py-0.5 rounded-full">
+                                        {distance.toFixed(1)} km
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <p className="text-gray-300 text-sm mb-4 line-clamp-2 h-10">
+                                  {pitch.description?.substring(0, 100) ||
+                                    "A really cool turf for cool players"}
+                                  {pitch.description &&
+                                  pitch.description.length > 100
+                                    ? "..."
+                                    : ""}
+                                </p>
+
+                                <div className="flex flex-wrap items-center justify-between text-xs text-gray-400 mb-4 gap-y-2">
+                                  <div className="flex items-center bg-dark/30 px-2 py-1 rounded-full">
+                                    <svg
+                                      className="w-3 h-3 mr-1"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                      />
+                                    </svg>
+                                    {Math.floor(
+                                      (pitch.customSettings?.matchDuration ||
+                                        900) / 60
+                                    )}{" "}
+                                    min
+                                  </div>
+                                  <div className="flex items-center bg-dark/30 px-2 py-1 rounded-full">
+                                    <svg
+                                      className="w-3 h-3 mr-1"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                      xmlns="http://www.w3.org/2000/svg"
+                                    >
+                                      <path
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth={2}
+                                        d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                      />
+                                    </svg>
+                                    {pitch.customSettings?.maxPlayersPerTeam ||
+                                      5}
+                                    -a-side
+                                  </div>
+                                  <div className="bg-dark/30 px-2 py-1 rounded-full">
+                                    Open today
+                                  </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                  <div className="text-purple-500 font-medium text-base">
+                                    ₦
+                                    {pitch.pricePerPerson?.toLocaleString() ||
+                                      "Free"}
+                                    <span className="text-xs">/person</span>
+                                  </div>
+                                  <div className="flex gap-2 w-full sm:w-auto">
+                                    <button
+                                      onClick={() =>
+                                        handleSelectPitch(pitch, true)
+                                      }
+                                      className="px-3 py-1.5 bg-dark text-gray-300 rounded hover:bg-dark-light flex-1 sm:flex-none text-center"
+                                    >
+                                      View Details
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleJoinPitch(pitch.id);
+                                      }}
+                                      className="px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 flex-1 sm:flex-none text-center"
+                                    >
+                                      Play Here
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ) : (
+                    <div className="bg-dark-light/20 rounded-lg p-8 text-center">
+                      <h2 className="text-xl font-bold text-white mb-2">
+                        No Pitches Found
+                      </h2>
+                      <p className="text-gray-400 mb-4">
+                        {searchQuery
+                          ? `No pitches match your search for "${searchQuery}"`
+                          : "No pitches are available in this location"}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSearchQuery("");
+                          setCityFilter("");
+                        }}
+                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mb-8">
+                <h1 className="text-3xl sm:text-4xl font-bold text-purple-500 mb-2">
+                  Find Pitches to Play Today
+                </h1>
+                <p className="text-gray-400 mb-6">
+                  Browse available five-a-side pitches and join a team or create
+                  your own
+                </p>
+
+                <div className="bg-dark-lighter rounded-lg p-4 mb-8">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="col-span-1 md:col-span-2">
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                          Search
+                        </label>
+                        <div className="relative">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            className="h-5 w-5 absolute left-3 top-2.5 text-gray-400"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                          </svg>
+                          <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            placeholder="Search pitches by name or location"
+                            className="w-full bg-dark border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-2">
+                        <label className="block text-sm font-medium text-gray-400 mb-1">
+                          City
+                        </label>
+                        <select
+                          value={cityFilter}
+                          onChange={(e) => setCityFilter(e.target.value)}
+                          className="w-full bg-dark border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-1 focus:ring-purple-500"
+                        >
+                          <option value="">All Cities</option>
+                          {cities.map((city) => (
+                            <option key={city} value={city}>
+                              {city}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end mt-2">
+                    <div className="flex items-center">
+                      <span className="text-gray-400 mr-2">
+                        Sort by Distance
+                      </span>
+                      <div className="relative inline-block w-10 mr-2 align-middle select-none">
+                        <input
+                          type="checkbox"
+                          id="distanceSort"
+                          checked={distanceSort}
+                          onChange={() => setDistanceSort(!distanceSort)}
+                          className="checked:bg-purple-500 outline-none focus:outline-none right-4 checked:right-0 duration-200 ease-in absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-700 appearance-none cursor-pointer"
+                        />
+                        <label
+                          htmlFor="distanceSort"
+                          className={`block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer ${
+                            distanceSort ? "bg-purple-700" : "bg-gray-700"
+                          }`}
+                        ></label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <div className="flex items-center mb-4">
+                    <svg
+                      className="w-5 h-5 text-purple-500 mr-2"
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <h2 className="text-xl font-bold">Pitches Near You</h2>
+                  </div>
+
+                  {getFilteredPitches().length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                      {getFilteredPitches().map((pitch) => {
+                        // Calculate distance if we have user coordinates
+                        let distance = null;
+                        if (userCoordinates && pitch.coordinates) {
+                          distance = calculateDistance(
+                            userCoordinates.latitude,
+                            userCoordinates.longitude,
+                            pitch.coordinates.latitude,
+                            pitch.coordinates.longitude
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={pitch.id}
+                            className="bg-dark-lighter rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300"
+                          >
+                            <div className="p-4">
+                              <div className="mb-3">
+                                <h3 className="font-bold text-lg text-white mb-1 line-clamp-1">
+                                  {pitch.name}
+                                </h3>
+                                <div className="flex items-center text-sm text-gray-400 flex-wrap">
+                                  <svg
+                                    className="w-4 h-4 mr-1 flex-shrink-0"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                    />
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                    />
+                                  </svg>
+                                  <span className="truncate max-w-[120px] mr-1">
+                                    {pitch.location},
+                                  </span>
+                                  <span className="truncate max-w-[80px]">
+                                    {pitch.city}
+                                  </span>
+                                  {distance !== null && (
+                                    <span className="ml-2 text-xs bg-dark-light/40 px-1.5 py-0.5 rounded-full">
+                                      {distance.toFixed(1)} km
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <p className="text-gray-300 text-sm mb-4 line-clamp-2 h-10">
+                                {pitch.description?.substring(0, 100) ||
+                                  "A really cool turf for cool players"}
+                                {pitch.description &&
+                                pitch.description.length > 100
+                                  ? "..."
+                                  : ""}
+                              </p>
+
+                              <div className="flex flex-wrap items-center justify-between text-xs text-gray-400 mb-4 gap-y-2">
+                                <div className="flex items-center bg-dark/30 px-2 py-1 rounded-full">
+                                  <svg
+                                    className="w-3 h-3 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                    />
+                                  </svg>
+                                  {Math.floor(
+                                    (pitch.customSettings?.matchDuration ||
+                                      900) / 60
+                                  )}{" "}
+                                  min
+                                </div>
+                                <div className="flex items-center bg-dark/30 px-2 py-1 rounded-full">
+                                  <svg
+                                    className="w-3 h-3 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                                    />
+                                  </svg>
+                                  {pitch.customSettings?.maxPlayersPerTeam || 5}
+                                  -a-side
+                                </div>
+                                <div className="bg-dark/30 px-2 py-1 rounded-full">
+                                  Open today
+                                </div>
+                              </div>
+
+                              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <div className="text-purple-500 font-medium text-base">
+                                  ₦
+                                  {pitch.pricePerPerson?.toLocaleString() ||
+                                    "Free"}
+                                  <span className="text-xs">/person</span>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                  <button
+                                    onClick={() =>
+                                      handleSelectPitch(pitch, true)
+                                    }
+                                    className="px-3 py-1.5 bg-dark text-gray-300 rounded hover:bg-dark-light flex-1 sm:flex-none text-center"
+                                  >
+                                    View Details
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleJoinPitch(pitch.id);
+                                    }}
+                                    className="px-3 py-1.5 bg-purple-600 text-white rounded hover:bg-purple-700 flex-1 sm:flex-none text-center"
+                                  >
+                                    Play Here
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-dark-light/20 rounded-lg p-8 text-center">
+                      <h2 className="text-xl font-bold text-white mb-2">
+                        No Pitches Found
+                      </h2>
+                      <p className="text-gray-400 mb-4">
+                        {searchQuery
+                          ? `No pitches match your search for "${searchQuery}"`
+                          : "No pitches are available in this location"}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setSearchQuery("");
+                          setCityFilter("");
+                        }}
+                        className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700"
+                      >
+                        Clear Filters
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </>
+      )}
+      {showDetailsModal && modalPitch && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-dark-lighter rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-2xl font-bold text-white">
+                  {modalPitch.name}
+                </h2>
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
                   <svg
                     xmlns="http://www.w3.org/2000/svg"
-                    className="h-12 w-12 mx-auto text-gray-500 mb-4"
+                    className="h-6 w-6"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -1873,696 +2769,156 @@ const PitchesPage: React.FC = () => {
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth={1.5}
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <div className="flex items-center text-gray-400 mb-2">
+                  <svg
+                    className="w-5 h-5 mr-2"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
                       d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
                     />
                     <path
                       strokeLinecap="round"
                       strokeLinejoin="round"
-                      strokeWidth={1.5}
+                      strokeWidth={2}
                       d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
                     />
                   </svg>
-                  <h3 className="text-xl font-bold mb-2">No Pitches Found</h3>
-                  <p className="text-gray-400 mb-4">
-                    Try adjusting your filters or search terms
-                  </p>
+                  {modalPitch.location}, {modalPitch.city}, {modalPitch.state}
                 </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Payment Action Confirmation Modal */}
-      {showConfirmModal && confirmAction && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
-          <div
-            className="absolute inset-0 bg-black/80"
-            onClick={() => setShowConfirmModal(false)}
-          ></div>
-          <div className="relative bg-dark-lighter rounded-xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="p-4 sm:p-6">
-              <h2 className="text-xl font-bold mb-4">Confirm Action</h2>
-              <p className="text-gray-300 mb-6">
-                Are you sure you want to mark{" "}
-                <span className="font-bold">{confirmAction.playerName}</span> as{" "}
-                {confirmAction.type === "payment"
-                  ? confirmAction.newStatus
-                    ? "paid"
-                    : "unpaid"
-                  : confirmAction.newStatus
-                  ? "exempted from payment"
-                  : "not exempted"}
-                ?
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
-                <button
-                  onClick={() => setShowConfirmModal(false)}
-                  className="bg-gray-700 hover:bg-gray-600 text-white text-center py-2.5 rounded-lg flex-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleConfirmAction}
-                  className={`${
-                    confirmAction.type === "payment"
-                      ? confirmAction.newStatus
-                        ? "bg-green-600 hover:bg-green-700"
-                        : "bg-yellow-600 hover:bg-yellow-700"
-                      : confirmAction.newStatus
-                      ? "bg-blue-600 hover:bg-blue-700"
-                      : "bg-gray-600 hover:bg-gray-700"
-                  } text-white text-center py-2.5 rounded-lg flex-1`}
-                >
-                  Confirm
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isEditing && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div
-            className="absolute inset-0 bg-black/80"
-            onClick={handleCancel}
-          ></div>
-          <div className="relative bg-dark-lighter rounded-xl w-full max-w-3xl md:max-w-4xl my-8 shadow-xl overflow-hidden">
-            <div className="p-4 md:p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold">
-                  {selectedPitch ? "Edit Pitch" : "Register New Pitch"}
-                </h2>
-                <button
-                  onClick={handleCancel}
-                  className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
+                <p className="text-gray-300">{modalPitch.description}</p>
               </div>
 
-              <form
-                onSubmit={handleSubmit}
-                className="space-y-6 max-h-[70vh] overflow-y-auto px-1"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Pitch Name *
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      value={formData.name || ""}
-                      onChange={handleChange}
-                      required
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      placeholder="Enter pitch name"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Location/Area *
-                    </label>
-                    <input
-                      type="text"
-                      name="location"
-                      value={formData.location || ""}
-                      onChange={handleChange}
-                      required
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      placeholder="e.g. Lekki Phase 1"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Street Address *
-                    </label>
-                    <input
-                      type="text"
-                      name="address"
-                      value={formData.address || ""}
-                      onChange={handleChange}
-                      required
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      placeholder="Enter street address"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      City *
-                    </label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city || ""}
-                      onChange={handleChange}
-                      required
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      placeholder="Enter city"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      State *
-                    </label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state || ""}
-                      onChange={handleChange}
-                      required
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      placeholder="Enter state"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Country
-                    </label>
-                    <input
-                      type="text"
-                      name="country"
-                      value={formData.country || "Nigeria"}
-                      onChange={handleChange}
-                      disabled
-                      className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary opacity-75"
-                    />
-                  </div>
-                </div>
-
-                <div className="border-t border-gray-700 pt-4 mb-4">
-                  <h3 className="font-semibold mb-3">Location on Map</h3>
-                  <p className="text-sm text-gray-400 mb-3">
-                    Set your pitch's exact location on the map. This helps
-                    players find your pitch easily.
-                  </p>
-                  <LocationPicker
-                    coordinates={formData.coordinates}
-                    onLocationSelected={handleLocationSelected}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Description
-                  </label>
-                  <textarea
-                    name="description"
-                    value={formData.description || ""}
-                    onChange={handleChange}
-                    rows={3}
-                    className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                    placeholder="Describe your pitch, surface type, amenities, etc."
-                  ></textarea>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Price Per Person (₦) *
-                  </label>
-                  <input
-                    type="number"
-                    name="pricePerPerson"
-                    value={formData.pricePerPerson || 2000}
-                    onChange={handleChange}
-                    required
-                    min={500}
-                    className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                    placeholder="e.g. 2000"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    This is the amount each player will pay per match
-                  </p>
-                </div>
-
-                <div className="border-t border-gray-700 pt-4">
-                  <h3 className="font-semibold mb-3">Match Settings</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Match Duration (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        name="matchDuration"
-                        value={
-                          formData.customSettings?.matchDuration
-                            ? formData.customSettings.matchDuration / 60
-                            : 15
-                        }
-                        onChange={(e) => {
-                          const minutes = parseInt(e.target.value);
-                          handleSettingsChange({
-                            target: {
-                              name: "matchDuration",
-                              value: minutes * 60, // Convert to seconds
-                              type: "number",
-                            },
-                          } as any);
-                        }}
-                        min={5}
-                        max={60}
-                        className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <div className="bg-dark rounded-lg p-4">
+                  <h3 className="font-medium text-gray-300 mb-3">
+                    Pitch Settings
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Match Duration:</span>
+                      <span className="text-white">
+                        {Math.floor(
+                          (modalPitch.customSettings?.matchDuration || 900) / 60
+                        )}{" "}
+                        minutes
+                      </span>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Max Goals (Game End)
-                      </label>
-                      <input
-                        type="number"
-                        name="maxGoals"
-                        value={formData.customSettings?.maxGoals || 7}
-                        onChange={handleSettingsChange}
-                        min={1}
-                        max={20}
-                        className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary"
-                      />
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Max Goals:</span>
+                      <span className="text-white">
+                        {modalPitch.customSettings?.maxGoals || 7}
+                      </span>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-1">
-                        Team Size (per side)
-                      </label>
-                      <select
-                        name="maxPlayersPerTeam"
-                        value={formData.customSettings?.maxPlayersPerTeam || 5}
-                        onChange={handleSettingsChange}
-                        className="bg-dark border border-gray-700 rounded-lg px-4 py-2 w-full focus:outline-none focus:border-primary appearance-none"
-                      >
-                        <option value={3}>3-a-side</option>
-                        <option value={4}>4-a-side</option>
-                        <option value={5}>5-a-side</option>
-                      </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Maximum team size is 5-a-side
-                      </p>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Team Size:</span>
+                      <span className="text-white">
+                        {modalPitch.customSettings?.maxPlayersPerTeam || 5}
+                        -a-side
+                      </span>
                     </div>
-                    <div>
-                      <label className="flex items-center h-full pt-4">
-                        <input
-                          type="checkbox"
-                          name="allowDraws"
-                          checked={formData.customSettings?.allowDraws || false}
-                          onChange={handleSettingsChange}
-                          className="form-checkbox h-5 w-5 text-green-500 rounded border-gray-500 focus:ring-0 focus:ring-offset-0"
-                        />
-                        <span className="ml-2 text-gray-300">
-                          Allow matches to end in draws
-                        </span>
-                      </label>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Allow Draws:</span>
+                      <span className="text-white">
+                        {modalPitch.customSettings?.allowDraws ? "Yes" : "No"}
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="border-t border-gray-700 pt-4">
-                  <h3 className="font-semibold mb-3">Referees</h3>
-                  {formReferees.length > 0 ? (
-                    <div className="mb-4 space-y-2">
-                      {formReferees.map((referee) => (
-                        <div
-                          key={referee.id}
-                          className="bg-dark p-3 rounded-lg flex justify-between items-center"
-                        >
-                          <div>
-                            <div className="font-medium text-sm">
-                              {referee.name}
-                            </div>
-                            <div className="text-gray-400 text-xs">
-                              {referee.email}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveReferee(referee.id)}
-                            className="text-red-400 hover:text-red-300"
-                          >
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-5 w-5"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
+                <div className="bg-dark rounded-lg p-4">
+                  <h3 className="font-medium text-gray-300 mb-3">
+                    Availability
+                  </h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Days Open:</span>
+                      <span className="text-white">
+                        {modalPitch.availability.daysOpen
+                          .map(
+                            (day) => day.charAt(0).toUpperCase() + day.slice(1)
+                          )
+                          .join(", ")}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="text-sm text-gray-400 mb-4">
-                      No referees added yet
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Hours:</span>
+                      <span className="text-white">
+                        {modalPitch.availability.openingTime} -{" "}
+                        {modalPitch.availability.closingTime}
+                      </span>
                     </div>
-                  )}
-
-                  <div className="bg-dark p-4 rounded-lg">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">
-                          Referee Name
-                        </label>
-                        <input
-                          type="text"
-                          value={refereeName}
-                          onChange={(e) => setRefereeName(e.target.value)}
-                          className="bg-dark-light border border-gray-700 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-primary"
-                          placeholder="Enter name"
-                          disabled={addingReferee}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-400 mb-1">
-                          Referee Email
-                        </label>
-                        <input
-                          type="email"
-                          value={refereeEmail}
-                          onChange={(e) => setRefereeEmail(e.target.value)}
-                          className="bg-dark-light border border-gray-700 rounded-lg px-3 py-1.5 w-full text-sm focus:outline-none focus:border-primary"
-                          placeholder="Enter email"
-                          disabled={addingReferee}
-                        />
-                      </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Price per Person:</span>
+                      <span className="text-purple-500 font-medium">
+                        ₦{modalPitch.pricePerPerson?.toLocaleString() || "Free"}
+                      </span>
                     </div>
-
-                    {refereeError && (
-                      <div className="mb-3 px-3 py-2 bg-yellow-500/10 border border-yellow-500/20 rounded text-yellow-400 text-xs">
-                        {refereeError}
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleAddReferee}
-                      disabled={!refereeName || !refereeEmail || addingReferee}
-                      className={`w-full py-1.5 rounded-lg text-sm flex items-center justify-center ${
-                        !refereeName || !refereeEmail || addingReferee
-                          ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-                          : "bg-primary/20 text-primary hover:bg-primary/30"
-                      }`}
-                    >
-                      {addingReferee ? (
-                        <>
-                          <svg
-                            className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Adding...
-                        </>
-                      ) : (
-                        "Add Referee"
-                      )}
-                    </button>
                   </div>
                 </div>
-
-                <div className="flex justify-end space-x-3 border-t border-gray-700 pt-4">
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg"
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center"
-                  >
-                    {submitting ? (
-                      <>
-                        <svg
-                          className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                          xmlns="http://www.w3.org/2000/svg"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                        >
-                          <circle
-                            className="opacity-25"
-                            cx="12"
-                            cy="12"
-                            r="10"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                          ></circle>
-                          <path
-                            className="opacity-75"
-                            fill="currentColor"
-                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                          ></path>
-                        </svg>
-                        {selectedPitch ? "Saving..." : "Creating..."}
-                      </>
-                    ) : selectedPitch ? (
-                      "Save Changes"
-                    ) : (
-                      "Register Pitch"
-                    )}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Add this modal to show pitch details for all users */}
-      {selectedPitch && !isEditing && !isPitchOwner && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div
-            className="absolute inset-0 bg-black/80"
-            onClick={() => setSelectedPitch(null)}
-          ></div>
-          <div className="relative bg-dark-lighter rounded-xl w-full max-w-3xl my-8 shadow-xl overflow-hidden">
-            <div className="p-4 md:p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-bold mb-1">
-                    {selectedPitch.name}
-                  </h2>
-                  <p className="text-gray-400">{selectedPitch.location}</p>
-                </div>
-                <button
-                  onClick={() => setSelectedPitch(null)}
-                  className="bg-dark/50 text-white p-1.5 rounded-full hover:bg-dark/80"
-                >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
               </div>
 
-              <p className="text-gray-300 mb-6">{selectedPitch.description}</p>
-
-              {/* Location map view */}
-              {selectedPitch.coordinates && (
+              {modalPitch.coordinates && (
                 <div className="mb-6">
-                  <h3 className="font-semibold mb-3 text-gray-300">Location</h3>
-                  <div className="bg-dark rounded-lg overflow-hidden">
+                  <h3 className="font-medium text-gray-300 mb-3">Location</h3>
+                  <div className="bg-dark rounded-lg overflow-hidden h-48">
                     <LocationPicker
-                      coordinates={selectedPitch.coordinates}
+                      coordinates={modalPitch.coordinates}
                       onLocationSelected={() => {}}
                       readOnly={true}
                     />
                   </div>
-                  <div className="mt-2 text-sm text-gray-400 flex items-center">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="h-4 w-4 mr-1 text-gray-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    {selectedPitch.address}, {selectedPitch.city},{" "}
-                    {selectedPitch.state}
-                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-dark p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2 text-gray-300">
-                    Match Settings
-                  </h3>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Match Duration:</span>
-                      <span>
-                        {selectedPitch.customSettings?.matchDuration
-                          ? selectedPitch.customSettings.matchDuration / 60
-                          : 15}{" "}
-                        minutes
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Max Goals:</span>
-                      <span>
-                        {selectedPitch.customSettings?.maxGoals || 7} goals
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Draws Allowed:</span>
-                      <span>
-                        {selectedPitch.customSettings?.allowDraws
-                          ? "Yes"
-                          : "No"}
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Team Size:</span>
-                      <span>
-                        {selectedPitch.customSettings?.maxPlayersPerTeam || 5}
-                        -a-side
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Price:</span>
-                      <span className="font-semibold text-primary">
-                        ₦
-                        {selectedPitch.pricePerPerson?.toLocaleString() ||
-                          "2,000"}
-                        /person
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-                <div className="bg-dark p-4 rounded-lg">
-                  <h3 className="font-semibold mb-2 text-gray-300">
-                    Pitch Info
-                  </h3>
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Surface:</span>
-                      <span>Artificial Turf</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Indoor/Outdoor:</span>
-                      <span>
-                        {selectedPitch.name.includes("Indoor")
-                          ? "Indoor"
-                          : "Outdoor"}
-                      </span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Changing Rooms:</span>
-                      <span>Available</span>
-                    </li>
-                    <li className="flex justify-between">
-                      <span className="text-gray-400">Availability:</span>
-                      <span>
-                        {selectedPitch.availability.daysOpen.length === 7
-                          ? "All week"
-                          : selectedPitch.availability.daysOpen
-                              .map(
-                                (day) =>
-                                  day.charAt(0).toUpperCase() +
-                                  day.slice(1).toLowerCase()
-                              )
-                              .join(", ")}
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-700">
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDetailsModal(false)}
+                  className="px-4 py-2 bg-dark text-gray-300 rounded hover:bg-dark-light"
+                >
+                  Close
+                </button>
+                {/* Add edit button for pitch owners viewing their own pitch */}
+                {isPitchOwner &&
+                  currentUser &&
+                  (currentUser.id === modalPitch.ownerId ||
+                    currentUser.ownedPitches?.includes(modalPitch.id)) && (
+                    <button
+                      onClick={() => {
+                        setShowDetailsModal(false);
+                        // Make sure the pitch is selected in the main view before editing
+                        setSelectedPitch(modalPitch);
+                        setFormData(modalPitch);
+                        handleEditPitch();
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Edit Pitch
+                    </button>
+                  )}
                 <button
                   onClick={() => {
-                    handleJoinPitch(selectedPitch.id);
-                    setSelectedPitch(null);
+                    setShowDetailsModal(false);
+                    handleJoinPitch(modalPitch.id);
                   }}
-                  className="bg-dark hover:bg-dark-light text-white text-center py-2.5 rounded-lg flex-1"
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
                 >
-                  Join This Pitch
+                  Play at This Pitch
                 </button>
-                <Link
-                  to="/teams"
-                  className="bg-primary hover:bg-primary/90 text-white text-center py-2.5 rounded-lg flex-1"
-                  onClick={(e) => {
-                    e.preventDefault(); // Prevent default to handle navigation manually
-                    console.log(
-                      "Create a Team clicked for pitch:",
-                      selectedPitch.id
-                    );
-
-                    // First set the selected pitch ID
-                    handleJoinPitch(selectedPitch.id);
-
-                    // Short delay to ensure the context is updated before navigation
-                    setTimeout(() => {
-                      console.log(
-                        "Navigating to /teams with selected pitch:",
-                        localStorage.getItem("selectedPitchId")
-                      );
-                      navigate("/teams");
-                    }, 100);
-                  }}
-                >
-                  Create a Team
-                </Link>
               </div>
             </div>
           </div>

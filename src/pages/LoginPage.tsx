@@ -59,7 +59,7 @@ const LoginPage: React.FC = () => {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold sport-gradient-text mb-2">
-            Fiveaside.team
+            MonkeyPost
           </h1>
           <p className="text-gray-400">
             {mode === "login"

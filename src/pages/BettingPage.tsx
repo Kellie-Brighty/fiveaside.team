@@ -467,7 +467,6 @@ const BettingPage: React.FC = () => {
       currency: "NGN",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
-      notation: "compact",
     }).format(amount);
   };
 
@@ -482,37 +481,45 @@ const BettingPage: React.FC = () => {
     if (poolSizes.total === 0) return amount;
 
     // Calculate proportional share of the losing pools
+    let rawWinnings = 0;
     switch (betOption) {
       case "teamA":
         // If Team A wins, get proportional share of Team B and Draw pools based on stake
         if (poolSizes.teamA === 0) return amount; // If first bet on Team A, just return stake
-        return (
+        rawWinnings =
           amount +
           Math.floor(
             (amount / poolSizes.teamA) * (poolSizes.teamB + poolSizes.draw)
-          )
-        );
+          );
+        break;
       case "teamB":
         // If Team B wins, get proportional share of Team A and Draw pools based on stake
         if (poolSizes.teamB === 0) return amount; // If first bet on Team B, just return stake
-        return (
+        rawWinnings =
           amount +
           Math.floor(
             (amount / poolSizes.teamB) * (poolSizes.teamA + poolSizes.draw)
-          )
-        );
+          );
+        break;
       case "draw":
         // If Draw, get proportional share of Team A and Team B pools based on stake
         if (poolSizes.draw === 0) return amount; // If first bet on Draw, just return stake
-        return (
+        rawWinnings =
           amount +
           Math.floor(
             (amount / poolSizes.draw) * (poolSizes.teamA + poolSizes.teamB)
-          )
-        );
+          );
+        break;
       default:
         return 0;
     }
+
+    // Apply 20% platform fee on winnings (not on the original stake)
+    const winningsOnly = Math.max(0, rawWinnings - amount);
+    const platformFee = Math.floor(winningsOnly * 0.2);
+    const finalWinnings = rawWinnings - platformFee;
+
+    return finalWinnings;
   };
 
   // Get option color based on selected bet
@@ -664,17 +671,22 @@ const BettingPage: React.FC = () => {
               for (const bet of winningBets) {
                 // Calculate proportional share of the losing pool
                 const proportion = bet.amount / totalWinningBetAmount;
-                const reward = Math.floor(proportion * totalLosingBetAmount);
+                const rawReward = Math.floor(proportion * totalLosingBetAmount);
+
+                // Apply 20% platform fee on winnings (not on the original stake)
+                const platformFee = Math.floor(rawReward * 0.2);
+                const reward = rawReward - platformFee;
                 const totalReturn = bet.amount + reward;
 
                 console.log(
-                  `User ${bet.userId} wins: stake ${bet.amount} + reward ${reward} = ${totalReturn}`
+                  `User ${bet.userId} wins: stake ${bet.amount} + reward ${reward} (after 20% fee: ${platformFee}) = ${totalReturn}`
                 );
 
                 // Update bet status
                 batch.update(bet.docRef, {
                   status: "won",
                   reward: reward,
+                  platformFee: platformFee,
                   totalReturn: totalReturn,
                   settledAt: serverTimestamp(),
                 });
@@ -928,6 +940,30 @@ const BettingPage: React.FC = () => {
                     </span>
                   </div>
 
+                  {/* Platform fee information */}
+                  <div className="bg-dark-lighter p-2 rounded-lg mb-3 text-xs">
+                    <div className="flex items-center">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="h-4 w-4 text-yellow-400 mr-1.5 flex-shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      <span className="text-gray-300">
+                        20% platform fee applies to all winnings (original stake
+                        is not charged)
+                      </span>
+                    </div>
+                  </div>
+
                   <div className="h-3 bg-dark rounded-full overflow-hidden mb-4">
                     <div className="flex h-full">
                       <div
@@ -1028,9 +1064,28 @@ const BettingPage: React.FC = () => {
                     </svg>
                     No bets have been placed yet
                   </div>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-gray-500 mb-2">
                     Be the first to place a bet on this match!
                   </p>
+                  <div className="mt-3 bg-dark-lighter p-2 rounded-lg text-xs inline-flex items-center">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-4 w-4 text-yellow-400 mr-1.5 flex-shrink-0"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span className="text-gray-300">
+                      20% platform fee applies to winnings
+                    </span>
+                  </div>
                 </div>
               )}
             </div>
@@ -1120,6 +1175,9 @@ const BettingPage: React.FC = () => {
                     >
                       {formatCurrency(potentialWinnings)}
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 text-right mb-2">
+                    After 20% platform fee
                   </div>
                   <div className="h-1 w-full bg-dark-light rounded-full"></div>
                 </div>

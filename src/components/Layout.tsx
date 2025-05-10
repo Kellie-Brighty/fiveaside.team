@@ -233,7 +233,7 @@ const Layout: React.FC = () => {
         {/* Desktop navigation - hidden on small screens */}
         <div className="container mx-auto justify-between items-center py-4 px-6 hidden md:flex">
           <Link to="/" className="text-2xl font-bold text-white">
-            Fiveaside.team
+            MonkeyPost
           </Link>
           <nav className="flex items-center">
             <ul className="flex space-x-6 mr-4">
@@ -324,7 +324,7 @@ const Layout: React.FC = () => {
           }}
         >
           <Link to="/" className="text-xl font-bold text-white">
-            Fiveaside.team
+            MonkeyPost
           </Link>
           {isAuthenticated && (
             <div className="flex items-center">

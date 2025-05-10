@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import "./App.css";
 import Layout from "./components/Layout";
@@ -14,9 +14,27 @@ import RequireAuth from "./components/RequireAuth";
 import ScrollToTop from "./components/ScrollToTop";
 import LoadingScreen from "./components/LoadingScreen";
 import { ToastContainer } from "./components/CustomToast";
+import { initToast } from "./utils/toast";
 
 const AppContent: React.FC = () => {
   const { isLoading } = useAuth();
+
+  // Initialize toast utility
+  useEffect(() => {
+    initToast();
+  }, []);
+
+  // Load Paystack script
+  useEffect(() => {
+    const script = document.createElement("script");
+    script.src = "https://js.paystack.co/v1/inline.js";
+    script.async = true;
+    document.body.appendChild(script);
+
+    return () => {
+      document.body.removeChild(script);
+    };
+  }, []);
 
   if (isLoading) {
     return <LoadingScreen />;

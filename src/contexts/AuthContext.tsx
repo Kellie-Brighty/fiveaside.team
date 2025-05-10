@@ -14,7 +14,7 @@ import { auth, db } from "../firebase";
 // const defaultReferee: User = {
 //   id: "referee1",
 //   name: "Referee",
-//   email: "referee@Fiveaside.team",
+//   email: "referee@MonkeyPost.com",
 //   role: "referee",
 //   balance: 0,
 //   bets: [],
@@ -26,7 +26,7 @@ import { auth, db } from "../firebase";
 // const defaultUser: User = {
 //   id: "user1",
 //   name: "Player",
-//   email: "player@Fiveaside.team",
+//   email: "player@MonkeyPost.com",
 //   role: "player",
 //   balance: 1000,
 //   bets: [],
@@ -38,7 +38,7 @@ import { auth, db } from "../firebase";
 // const defaultPitchOwner: User = {
 //   id: "owner1",
 //   name: "Pitch Owner",
-//   email: "owner@Fiveaside.team",
+//   email: "owner@MonkeyPost.com",
 //   role: "pitch_owner",
 //   balance: 0,
 //   bets: [],

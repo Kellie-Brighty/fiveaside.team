@@ -4,7 +4,7 @@ export interface Pitch {
   name: string;
   location?: string;
   address?: string;
-  city: string;
+  city?: string;
   state?: string;
   country: string;
   coordinates?: {
@@ -18,19 +18,19 @@ export interface Pitch {
   customSettings?: PitchSettings;
   ownerId: string;
   availability?: {
-    daysOpen: (
-      | "monday"
-      | "tuesday"
-      | "wednesday"
-      | "thursday"
-      | "friday"
-      | "saturday"
-      | "sunday"
-    )[];
+    daysOpen: string[];
     openingTime: string; // e.g. "09:00"
     closingTime: string; // e.g. "22:00"
   };
   pricePerPerson?: number; // Price per person in Naira
+  boostData?: {
+    isActive: boolean;
+    boostType: string;
+    startDate: Date;
+    endDate: Date;
+    transactionRef?: string;
+    lastPaymentDate?: Date;
+  };
 }
 
 // Settings specific to a pitch

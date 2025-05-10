@@ -1,4 +1,4 @@
-# Fiveaside.team
+# MonkeyPost
 
 A modern web application for managing five-aside football teams, matches, and betting.
 
@@ -62,7 +62,7 @@ To access the referee features, check the "Login as Referee" option on the login
 ## Project Structure
 
 ```
-Fiveaside.team/
+MonkeyPost/
 ├── src/
 │   ├── components/       # Reusable UI components
 │   ├── contexts/         # React contexts (Auth, etc.)
