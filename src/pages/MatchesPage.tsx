@@ -87,6 +87,9 @@ const MatchesPage: React.FC = () => {
     new Date().toISOString().split("T")[0]
   );
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [customMatchDuration, setCustomMatchDuration] = useState<number | null>(
+    null
+  );
 
   useEffect(() => {
     // Scroll to top when component mounts
@@ -254,6 +257,12 @@ const MatchesPage: React.FC = () => {
 
   // Start a new match
   const startMatch = async () => {
+    // Determine the match duration to use
+    const duration =
+      customMatchDuration ||
+      selectedPitch?.customSettings?.matchDuration ||
+      600;
+
     if (!currentMatch) {
       if (waitingTeams.length < 2) {
         alert("Not enough teams to start a match!");
@@ -303,6 +312,21 @@ const MatchesPage: React.FC = () => {
           pitchId: selectedPitch?.id || "pitch1",
         };
 
+        // Create a pitchSettings object with potentially customized duration
+        const pitchSettings = {
+          ...(selectedPitch?.customSettings || {
+            matchDuration: 600,
+            maxGoals: 7,
+            allowDraws: false,
+            maxPlayersPerTeam: 5,
+          }),
+        };
+
+        // Override matchDuration if custom value is set
+        if (customMatchDuration) {
+          pitchSettings.matchDuration = customMatchDuration;
+        }
+
         // Save to Firebase
         const matchData = {
           teamA: teamA, // Use cleaned team for Firestore
@@ -315,13 +339,8 @@ const MatchesPage: React.FC = () => {
           pitchId: newMatch.pitchId,
           refereeId: currentUser?.id,
           matchDate: todayString, // Ensure matchDate is included
-          // Add pitch settings for reference
-          pitchSettings: selectedPitch?.customSettings || {
-            matchDuration: 600,
-            maxGoals: 7,
-            allowDraws: false,
-            maxPlayersPerTeam: 5,
-          },
+          // Add pitch settings for reference with potentially custom duration
+          pitchSettings: pitchSettings,
         };
 
         console.log("Creating new match in Firestore:", matchData);
@@ -343,6 +362,21 @@ const MatchesPage: React.FC = () => {
       try {
         setIsSavingMatch(true);
 
+        // Create a pitchSettings object with potentially customized duration
+        const pitchSettings = {
+          ...(selectedPitch?.customSettings || {
+            matchDuration: 600,
+            maxGoals: 7,
+            allowDraws: false,
+            maxPlayersPerTeam: 5,
+          }),
+        };
+
+        // Override matchDuration if custom value is set
+        if (customMatchDuration) {
+          pitchSettings.matchDuration = customMatchDuration;
+        }
+
         // Update in Firebase
         if (currentMatch.id) {
           const matchRef = doc(db, "matches", currentMatch.id);
@@ -351,12 +385,7 @@ const MatchesPage: React.FC = () => {
             startTime: serverTimestamp(),
             isActive: true,
             // Add pitch settings for reference if not already there
-            pitchSettings: selectedPitch?.customSettings || {
-              matchDuration: 600,
-              maxGoals: 7,
-              allowDraws: false,
-              maxPlayersPerTeam: 5,
-            },
+            pitchSettings: pitchSettings,
           });
         }
 
@@ -372,9 +401,11 @@ const MatchesPage: React.FC = () => {
 
     setIsMatchActive(true);
 
-    // Set match time based on pitch settings if available
-    const duration = selectedPitch?.customSettings?.matchDuration || 600;
+    // Set match time based on custom duration if specified, otherwise use pitch settings
     setMatchTime(duration);
+
+    // Reset custom duration after starting the match
+    setCustomMatchDuration(null);
   };
 
   // End current match
@@ -1069,39 +1100,118 @@ const MatchesPage: React.FC = () => {
 
                 <div className="mt-6 flex justify-center">
                   {!isMatchActive ? (
-                    <button
-                      onClick={() => startMatch()}
-                      className="px-6 py-3 bg-primary hover:bg-primary/90 rounded-lg text-white font-medium flex items-center"
-                      disabled={isSavingMatch}
-                    >
-                      {isSavingMatch ? (
-                        <>
-                          <svg
-                            className="animate-spin h-5 w-5 mr-2"
-                            xmlns="http://www.w3.org/2000/svg"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            ></circle>
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            ></path>
-                          </svg>
-                          Starting...
-                        </>
-                      ) : (
-                        <>Start Match</>
-                      )}
-                    </button>
+                    <>
+                      <div className="flex flex-col items-center w-full max-w-md mx-auto">
+                        {/* Duration adjustment section */}
+                        <div className="w-full mb-4 p-4 bg-dark/40 rounded-lg border border-primary/20">
+                          <div className="flex justify-between items-center mb-2">
+                            <label
+                              htmlFor="match-duration"
+                              className="text-white font-medium"
+                            >
+                              Match Duration:
+                            </label>
+                            <span className="text-primary font-bold">
+                              {formatTime(
+                                customMatchDuration ||
+                                  selectedPitch?.customSettings
+                                    ?.matchDuration ||
+                                  600
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <input
+                              id="match-duration"
+                              type="range"
+                              min="300"
+                              max="3600"
+                              step="60"
+                              className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                              value={
+                                customMatchDuration ||
+                                selectedPitch?.customSettings?.matchDuration ||
+                                600
+                              }
+                              onChange={(e) =>
+                                setCustomMatchDuration(parseInt(e.target.value))
+                              }
+                            />
+                            <div className="text-xs text-gray-400">
+                              {Math.floor(
+                                (customMatchDuration ||
+                                  selectedPitch?.customSettings
+                                    ?.matchDuration ||
+                                  600) / 60
+                              )}{" "}
+                              min
+                            </div>
+                          </div>
+                          {customMatchDuration && (
+                            <div className="mt-2 flex justify-end">
+                              <button
+                                onClick={() => setCustomMatchDuration(null)}
+                                className="flex items-center px-3 py-1.5 text-sm bg-dark/70 hover:bg-dark/90 text-primary hover:text-primary-light border border-primary/30 rounded-md transition-colors"
+                              >
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-3.5 w-3.5 mr-1"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                  />
+                                </svg>
+                                Reset to default
+                              </button>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2">
+                            You can adjust the match duration before starting
+                            the match
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={() => startMatch()}
+                          className="px-6 py-3 bg-primary hover:bg-primary/90 rounded-lg text-white font-medium flex items-center"
+                          disabled={isSavingMatch}
+                        >
+                          {isSavingMatch ? (
+                            <>
+                              <svg
+                                className="animate-spin h-5 w-5 mr-2"
+                                xmlns="http://www.w3.org/2000/svg"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                              >
+                                <circle
+                                  className="opacity-25"
+                                  cx="12"
+                                  cy="12"
+                                  r="10"
+                                  stroke="currentColor"
+                                  strokeWidth="4"
+                                ></circle>
+                                <path
+                                  className="opacity-75"
+                                  fill="currentColor"
+                                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                                ></path>
+                              </svg>
+                              Starting...
+                            </>
+                          ) : (
+                            <>Start Match</>
+                          )}
+                        </button>
+                      </div>
+                    </>
                   ) : (
                     <div className="text-center bg-dark/50 p-4 rounded-lg border border-primary/20">
                       <p className="text-gray-300 mb-2">Match in progress</p>

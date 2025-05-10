@@ -127,6 +127,11 @@ export interface User {
       longitude: number;
     };
   }; // User location in Nigeria
+  activeSession?: {
+    id: string;
+    lastActive: Date;
+    device: string;
+  } | null; // Current active session data
 }
 
 // Odds type
@@ -138,4 +143,16 @@ export interface Odds {
   pitchId: string; // Which pitch these odds belong to
   minimumBet?: number; // Minimum bet amount in Naira
   maximumBet?: number; // Maximum bet amount in Naira
+}
+
+// Add global Window interface
+declare global {
+  interface Window {
+    toast?: {
+      success: (message: string, duration?: number) => void;
+      error: (message: string, duration?: number) => void;
+      warning: (message: string, duration?: number) => void;
+      info: (message: string, duration?: number) => void;
+    };
+  }
 }

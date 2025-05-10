@@ -8,13 +8,13 @@ export const initToast = () => {
   }
 
   // Assign functions to window.toast
-  window.toast.success = (message: string, duration?: number) =>
+  window.toast!.success = (message: string, duration?: number) =>
     showToast(message, "success", duration);
-  window.toast.error = (message: string, duration?: number) =>
+  window.toast!.error = (message: string, duration?: number) =>
     showToast(message, "error", duration);
-  window.toast.info = (message: string, duration?: number) =>
+  window.toast!.info = (message: string, duration?: number) =>
     showToast(message, "info", duration);
-  window.toast.warning = (message: string, duration?: number) =>
+  window.toast!.warning = (message: string, duration?: number) =>
     showToast(message, "warning", duration);
 };
 

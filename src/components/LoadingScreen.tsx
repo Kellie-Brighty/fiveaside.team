@@ -67,26 +67,28 @@ const LoadingScreen: React.FC = () => {
 
         <div className="text-center absolute left-1/2 transform -translate-x-1/2">
           <div className="flex items-center justify-center mb-4">
-            {["F", "i", "v", "e", "a", "s", "i", "d", "e"].map((letter, i) => (
-              <span
-                key={i}
-                className="inline-block text-5xl font-bold"
-                style={{
-                  animationName: "letterBounce",
-                  animationDuration: "2s",
-                  animationDelay: `${i * 0.1}s`,
-                  animationIterationCount: "infinite",
-                  animationTimingFunction: "ease-in-out",
-                  background:
-                    "linear-gradient(135deg, #00ffcc 0%, #00ccff 100%)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  filter: "drop-shadow(0 0 10px rgba(0, 255, 204, 0.7))",
-                }}
-              >
-                {letter}
-              </span>
-            ))}
+            {["M", "o", "n", "k", "e", "y", "P", "o", "s", "t"].map(
+              (letter, i) => (
+                <span
+                  key={i}
+                  className="inline-block text-5xl font-bold"
+                  style={{
+                    animationName: "letterBounce",
+                    animationDuration: "2s",
+                    animationDelay: `${i * 0.1}s`,
+                    animationIterationCount: "infinite",
+                    animationTimingFunction: "ease-in-out",
+                    background:
+                      "linear-gradient(135deg, #b53bff 0%, #ff3bda 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    filter: "drop-shadow(0 0 10px rgba(255, 59, 218, 0.8))",
+                  }}
+                >
+                  {letter}
+                </span>
+              )
+            )}
           </div>
 
           <div className="relative mt-8 bg-dark-light/30 rounded-lg p-4 backdrop-blur-sm border border-dark-light">
@@ -95,11 +97,13 @@ const LoadingScreen: React.FC = () => {
             </div>
             <div className="mt-2 h-1 w-full bg-dark-light overflow-hidden rounded-full">
               <div
-                className="h-full bg-gradient-to-r from-green-500 to-emerald-500 rounded-full"
+                className="h-full rounded-full"
                 style={{
                   width: "100%",
                   animation: "loading 2s ease-in-out infinite",
                   backgroundSize: "200% 100%",
+                  background:
+                    "linear-gradient(to right, #b53bff, #ff3bda, #b53bff)",
                 }}
               ></div>
             </div>

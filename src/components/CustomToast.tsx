@@ -301,15 +301,3 @@ const ToastContainer: React.FC = () => {
 };
 
 export { ToastContainer };
-
-// Add type definitions to window
-declare global {
-  interface Window {
-    toast: {
-      success: (message: string, duration?: number) => void;
-      error: (message: string, duration?: number) => void;
-      warning: (message: string, duration?: number) => void;
-      info: (message: string, duration?: number) => void;
-    };
-  }
-}

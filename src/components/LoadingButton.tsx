@@ -28,8 +28,8 @@ const LoadingButton: React.FC<LoadingButtonProps> = ({
   const disabledClasses = disabled ? "opacity-50 cursor-not-allowed" : "";
 
   // Individual letters with animations
-  const letters = ["F", "i", "v", "e", "a", "s", "i", "d", "e"];
-  const delays = [0, 100, 200, 300, 400, 500, 600, 700, 800];
+  const letters = ["M", "o", "n", "k", "e", "y", "P", "o", "s", "t"];
+  const delays = [0, 100, 200, 300, 400, 500, 600, 700, 800, 900];
 
   return (
     <button
@@ -43,14 +43,10 @@ const LoadingButton: React.FC<LoadingButtonProps> = ({
             {letters.map((letter, index) => (
               <span
                 key={index}
-                className="inline-block animate-bounce font-bold"
+                className="inline-block animate-bounce font-bold text-white"
                 style={{
                   animationDelay: `${delays[index]}ms`,
                   animationDuration: "1s",
-                  background: "linear-gradient(90deg, #00ffcc, #00ccff)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  textShadow: "0 0 8px rgba(0, 255, 204, 0.6)",
                 }}
               >
                 {letter}
