@@ -31,6 +31,10 @@ export interface Pitch {
     transactionRef?: string;
     lastPaymentDate?: Date;
   };
+  vests?: {
+    hasVests: boolean;
+    colors: string[]; // Array of vest colors available at the pitch
+  };
 }
 
 // Settings specific to a pitch
@@ -79,6 +83,10 @@ export interface Match {
   isActive: boolean;
   pitchId: string; // Which pitch this match belongs to
   feePerPerson?: number; // Fee per person in Naira
+  vestColors?: {
+    teamA: string;
+    teamB: string;
+  };
 }
 
 // Match Session type

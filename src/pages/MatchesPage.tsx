@@ -134,6 +134,7 @@ const MatchesPage: React.FC = () => {
             customSettings: pitchData.customSettings,
             availability: pitchData.availability,
             pricePerPerson: pitchData.pricePerPerson,
+            vests: pitchData.vests || { hasVests: false, colors: [] },
           });
         });
 
@@ -312,6 +313,21 @@ const MatchesPage: React.FC = () => {
           pitchId: selectedPitch?.id || "pitch1",
         };
 
+        // Assign vest colors if available
+        if (
+          selectedPitch?.vests?.hasVests &&
+          selectedPitch.vests.colors.length >= 2
+        ) {
+          // Shuffle the array of colors and pick the first two
+          const shuffledColors = [...selectedPitch.vests.colors].sort(
+            () => Math.random() - 0.5
+          );
+          newMatch.vestColors = {
+            teamA: shuffledColors[0],
+            teamB: shuffledColors[1],
+          };
+        }
+
         // Create a pitchSettings object with potentially customized duration
         const pitchSettings = {
           ...(selectedPitch?.customSettings || {
@@ -337,6 +353,7 @@ const MatchesPage: React.FC = () => {
           startTime: serverTimestamp(),
           isActive: newMatch.isActive,
           pitchId: newMatch.pitchId,
+          vestColors: newMatch.vestColors, // Include vest colors in Firebase
           refereeId: currentUser?.id,
           matchDate: todayString, // Ensure matchDate is included
           // Add pitch settings for reference with potentially custom duration
@@ -561,6 +578,21 @@ const MatchesPage: React.FC = () => {
           pitchId: nextMatch.teamB.pitchId,
         };
 
+        // Assign vest colors if available for next match
+        if (
+          selectedPitch?.vests?.hasVests &&
+          selectedPitch.vests.colors.length >= 2
+        ) {
+          // Shuffle the array of colors and pick the first two
+          const shuffledColors = [...selectedPitch.vests.colors].sort(
+            () => Math.random() - 0.5
+          );
+          nextMatch.vestColors = {
+            teamA: shuffledColors[0],
+            teamB: shuffledColors[1],
+          };
+        }
+
         // Create match data for Firestore
         const matchData = {
           teamA: teamA,
@@ -570,6 +602,7 @@ const MatchesPage: React.FC = () => {
           status: "scheduled",
           isActive: false,
           pitchId: selectedPitch?.id || "pitch1",
+          vestColors: nextMatch.vestColors, // Include vest colors for next match
           refereeId: currentUser?.id,
           matchDate: todayString,
           // Add pitch settings reference
@@ -725,6 +758,7 @@ const MatchesPage: React.FC = () => {
               isActive: data.status === "in-progress",
               pitchId: data.pitchId,
               winner: data.winner || null,
+              vestColors: data.vestColors,
             });
           });
 
@@ -973,6 +1007,34 @@ const MatchesPage: React.FC = () => {
                         </div>
                       </>
                     )}
+
+                    {/* Add vest information */}
+                    {selectedPitch.vests?.hasVests &&
+                      selectedPitch.vests.colors.length > 0 && (
+                        <div className="bg-dark/50 p-3 rounded-lg md:col-span-3">
+                          <p className="mb-1 text-xs text-gray-400 uppercase">
+                            Available Vest Colors
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {selectedPitch.vests.colors.map((color, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center bg-dark/30 px-2 py-1 rounded-full"
+                              >
+                                <span
+                                  className="w-3 h-3 rounded-full mr-1.5"
+                                  style={{
+                                    backgroundColor: color
+                                      .toLowerCase()
+                                      .replace(/\s+/g, ""),
+                                  }}
+                                ></span>
+                                <span className="text-sm">{color}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                   </div>
                 </div>
               </div>
@@ -1018,6 +1080,19 @@ const MatchesPage: React.FC = () => {
                         {currentMatch.scoreA}
                       </span>
                     </div>
+                    {currentMatch.vestColors?.teamA && (
+                      <div className="text-sm mb-2 bg-dark/30 py-1 px-2 rounded-md inline-flex items-center">
+                        <span
+                          className="w-3 h-3 rounded-full mr-1.5"
+                          style={{
+                            backgroundColor: currentMatch.vestColors.teamA
+                              .toLowerCase()
+                              .replace(/\s+/g, ""),
+                          }}
+                        ></span>
+                        <span>{currentMatch.vestColors.teamA} vests</span>
+                      </div>
+                    )}
                     <button
                       onClick={() => updateScore("A")}
                       className="w-full py-2 bg-primary hover:bg-primary/90 rounded-lg text-white font-medium flex items-center justify-center"
@@ -1065,6 +1140,19 @@ const MatchesPage: React.FC = () => {
                         {currentMatch.scoreB}
                       </span>
                     </div>
+                    {currentMatch.vestColors?.teamB && (
+                      <div className="text-sm mb-2 bg-dark/30 py-1 px-2 rounded-md inline-flex items-center">
+                        <span
+                          className="w-3 h-3 rounded-full mr-1.5"
+                          style={{
+                            backgroundColor: currentMatch.vestColors.teamB
+                              .toLowerCase()
+                              .replace(/\s+/g, ""),
+                          }}
+                        ></span>
+                        <span>{currentMatch.vestColors.teamB} vests</span>
+                      </div>
+                    )}
                     <button
                       onClick={() => updateScore("B")}
                       className="w-full py-2 bg-primary hover:bg-primary/90 rounded-lg text-white font-medium flex items-center justify-center"
@@ -1480,6 +1568,19 @@ const MatchesPage: React.FC = () => {
                                 <p className="text-xl sm:text-2xl font-bold text-primary">
                                   {match.scoreA}
                                 </p>
+                                {match.vestColors?.teamA && (
+                                  <div className="inline-flex items-center bg-dark/30 px-1.5 py-0.5 rounded text-xs mt-1">
+                                    <span
+                                      className="w-2 h-2 rounded-full mr-1"
+                                      style={{
+                                        backgroundColor: match.vestColors.teamA
+                                          .toLowerCase()
+                                          .replace(/\s+/g, ""),
+                                      }}
+                                    ></span>
+                                    <span>{match.vestColors.teamA}</span>
+                                  </div>
+                                )}
                               </div>
                               <div className="col-span-1 text-center text-xs text-gray-500">
                                 vs
@@ -1491,6 +1592,19 @@ const MatchesPage: React.FC = () => {
                                 <p className="text-xl sm:text-2xl font-bold text-primary">
                                   {match.scoreB}
                                 </p>
+                                {match.vestColors?.teamB && (
+                                  <div className="inline-flex items-center bg-dark/30 px-1.5 py-0.5 rounded text-xs mt-1">
+                                    <span
+                                      className="w-2 h-2 rounded-full mr-1"
+                                      style={{
+                                        backgroundColor: match.vestColors.teamB
+                                          .toLowerCase()
+                                          .replace(/\s+/g, ""),
+                                      }}
+                                    ></span>
+                                    <span>{match.vestColors.teamB}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                             <div className="mt-2 pt-2 border-t border-gray-700 flex flex-wrap sm:flex-nowrap justify-between items-center text-xs">

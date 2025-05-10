@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import {  useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import {
   collection,
   addDoc,
@@ -59,6 +59,10 @@ interface Pitch {
     endDate: Date;
     transactionRef?: string;
     lastPaymentDate?: Date;
+  };
+  vests?: {
+    hasVests: boolean;
+    colors: string[]; // Array of vest colors available at the pitch
   };
 }
 
@@ -314,23 +318,36 @@ const PitchesPage: React.FC = () => {
   const [formData, setFormData] = useState<Partial<Pitch>>({
     name: "",
     location: "",
+    address: "",
     city: "",
     state: "",
     country: "Nigeria",
     description: "",
     referees: [],
     availability: {
-      daysOpen: ["monday", "wednesday", "friday"],
-      openingTime: "09:00",
+      daysOpen: [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+      ],
+      openingTime: "08:00",
       closingTime: "22:00",
     },
     customSettings: {
-      matchDuration: 900, // 15 minutes in seconds
+      matchDuration: 900, // 15 minutes default
       maxGoals: 7,
       allowDraws: false,
       maxPlayersPerTeam: 5,
     },
-    pricePerPerson: 2000,
+    pricePerPerson: 3000,
+    vests: {
+      hasVests: false,
+      colors: [],
+    },
   });
   const [formReferees, setFormReferees] = useState<
     { id: string; name: string; email: string }[]
@@ -375,6 +392,45 @@ const PitchesPage: React.FC = () => {
     playerName: string;
     newStatus: boolean;
   } | null>(null);
+
+  // Find where all the states are declared and add these new states
+  const [vestColorInput, setVestColorInput] = useState<string>("");
+
+  // Add these new handler functions
+  const handleAddVestColor = () => {
+    if (!vestColorInput.trim()) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      vests: {
+        hasVests: prev.vests?.hasVests ?? true,
+        colors: [...(prev.vests?.colors || []), vestColorInput.trim()],
+      },
+    }));
+    setVestColorInput("");
+  };
+
+  const handleRemoveVestColor = (colorToRemove: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      vests: {
+        ...prev.vests!,
+        colors:
+          prev.vests?.colors.filter((color) => color !== colorToRemove) || [],
+      },
+    }));
+  };
+
+  const handleVestsToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const hasVests = e.target.checked;
+    setFormData((prev) => ({
+      ...prev,
+      vests: {
+        hasVests,
+        colors: hasVests ? prev.vests?.colors || [] : [],
+      },
+    }));
+  };
 
   // Fetch pitches from Firestore
   useEffect(() => {
@@ -551,21 +607,10 @@ const PitchesPage: React.FC = () => {
       location: "",
       address: "",
       city: "",
-      country: "Nigeria",
       state: "",
-      coordinates: {
-        latitude: 0,
-        longitude: 0,
-      },
+      country: "Nigeria",
       description: "",
       referees: [],
-      ownerId: currentUser?.id || "",
-      customSettings: {
-        matchDuration: 900,
-        maxGoals: 7,
-        allowDraws: false,
-        maxPlayersPerTeam: 5,
-      },
       availability: {
         daysOpen: [
           "monday",
@@ -576,10 +621,20 @@ const PitchesPage: React.FC = () => {
           "saturday",
           "sunday",
         ],
-        openingTime: "09:00",
+        openingTime: "08:00",
         closingTime: "22:00",
       },
-      pricePerPerson: 2000, // Default 2,000 Naira per person
+      customSettings: {
+        matchDuration: 900, // 15 minutes default
+        maxGoals: 7,
+        allowDraws: false,
+        maxPlayersPerTeam: 5,
+      },
+      pricePerPerson: 3000,
+      vests: {
+        hasVests: false,
+        colors: [],
+      },
     });
     setIsEditing(true);
   };
@@ -1963,6 +2018,110 @@ const PitchesPage: React.FC = () => {
                               </label>
                             </div>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* Add vest settings section here */}
+                      <div>
+                        <h3 className="text-md font-medium text-gray-300 mb-2">
+                          Team Vests
+                        </h3>
+                        <div className="bg-dark rounded-lg p-4 space-y-4">
+                          <div className="flex items-center mb-4">
+                            <input
+                              type="checkbox"
+                              id="hasVests"
+                              checked={formData.vests?.hasVests || false}
+                              onChange={handleVestsToggle}
+                              className="h-4 w-4 text-green-500 rounded border-gray-700 focus:ring-green-500 bg-dark-light"
+                            />
+                            <label
+                              htmlFor="hasVests"
+                              className="ml-2 text-sm text-gray-300"
+                            >
+                              Vests available at this pitch
+                            </label>
+                          </div>
+
+                          {formData.vests?.hasVests && (
+                            <>
+                              <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-300 mb-1">
+                                  Available Vest Colors
+                                </label>
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="text"
+                                    value={vestColorInput}
+                                    onChange={(e) =>
+                                      setVestColorInput(e.target.value)
+                                    }
+                                    placeholder="e.g. Red, Blue, Yellow..."
+                                    className="flex-1 bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={handleAddVestColor}
+                                    className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-md"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Enter vest colors one at a time and click Add
+                                </p>
+                              </div>
+
+                              {formData.vests.colors.length > 0 ? (
+                                <div>
+                                  <p className="text-sm font-medium text-gray-300 mb-2">
+                                    Current Vest Colors:
+                                  </p>
+                                  <div className="flex flex-wrap gap-2 mt-2">
+                                    {formData.vests.colors.map(
+                                      (color, index) => (
+                                        <div
+                                          key={index}
+                                          className="bg-dark-light px-3 py-1 rounded-full flex items-center"
+                                        >
+                                          <span className="text-sm text-white mr-2">
+                                            {color}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() =>
+                                              handleRemoveVestColor(color)
+                                            }
+                                            className="text-gray-400 hover:text-red-500"
+                                          >
+                                            <svg
+                                              xmlns="http://www.w3.org/2000/svg"
+                                              className="h-4 w-4"
+                                              fill="none"
+                                              viewBox="0 0 24 24"
+                                              stroke="currentColor"
+                                            >
+                                              <path
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                strokeWidth={2}
+                                                d="M6 18L18 6M6 6l12 12"
+                                              />
+                                            </svg>
+                                          </button>
+                                        </div>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              ) : (
+                                <p className="text-sm text-gray-400">
+                                  No vest colors added yet. Add colors to assign
+                                  to teams.
+                                </p>
+                              )}
+                            </>
+                          )}
                         </div>
                       </div>
 
