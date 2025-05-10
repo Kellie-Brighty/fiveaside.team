@@ -14,6 +14,7 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import BoostInfo from "../components/BoostInfo";
+import BoostedPitchesCarousel from "../components/BoostedPitchesCarousel";
 
 // Define types directly to avoid import issues
 interface PitchSettings {
@@ -59,6 +60,15 @@ interface Pitch {
     endDate: Date;
     transactionRef?: string;
     lastPaymentDate?: Date;
+    content?: {
+      text?: string;
+      imageUrl?: string;
+    };
+    targetLocation?: {
+      city?: string;
+      state?: string;
+      country?: string;
+    };
   };
   vests?: {
     hasVests: boolean;
@@ -363,6 +373,7 @@ const PitchesPage: React.FC = () => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [modalPitch, setModalPitch] = useState<Pitch | null>(null); // Add a separate state for modal pitch
+  const [activeBoostedPitches, setActiveBoostedPitches] = useState<Pitch[]>([]);
 
   // Get user location for new pitches
   const [_userLocation, _setUserLocation] = useState<{
@@ -395,6 +406,7 @@ const PitchesPage: React.FC = () => {
 
   // Find where all the states are declared and add these new states
   const [vestColorInput, setVestColorInput] = useState<string>("");
+  const [showPromotedPitches, setShowPromotedPitches] = useState<boolean>(true);
 
   // Add these new handler functions
   const handleAddVestColor = () => {
@@ -556,6 +568,26 @@ const PitchesPage: React.FC = () => {
         }
       );
     }
+  }, [pitches]);
+
+  // Listen for custom events from the BoostedPitchesCarousel
+  useEffect(() => {
+    const handleShowPitchDetails = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      const { pitchId } = customEvent.detail;
+
+      // Find the pitch and show its details
+      const pitch = pitches.find((p) => p.id === pitchId);
+      if (pitch) {
+        handleSelectPitch(pitch, true);
+      }
+    };
+
+    window.addEventListener("showPitchDetails", handleShowPitchDetails);
+
+    return () => {
+      window.removeEventListener("showPitchDetails", handleShowPitchDetails);
+    };
   }, [pitches]);
 
   const handleSelectPitch = (pitch: Pitch, showModal = false) => {
@@ -1482,8 +1514,116 @@ const PitchesPage: React.FC = () => {
     );
   };
 
+  // Filter active boosted pitches
+  useEffect(() => {
+    if (pitches.length === 0) return;
+
+    const now = new Date();
+    const boosted = pitches.filter((pitch) => {
+      // Check if pitch has active boost data
+      if (!pitch.boostData?.isActive) return false;
+
+      // Check if boost is expired
+      const endDate = pitch.boostData.endDate;
+      if (!endDate) return false;
+
+      // Convert Firebase timestamp if necessary
+      let endDateTime: Date;
+      if (
+        typeof endDate === "object" &&
+        endDate !== null &&
+        "toDate" in endDate
+      ) {
+        endDateTime = (endDate as { toDate(): Date }).toDate();
+      } else if (endDate instanceof Date) {
+        endDateTime = endDate;
+      } else {
+        endDateTime = new Date(endDate as any);
+      }
+
+      // Only include unexpired boosts
+      return endDateTime > now;
+    });
+
+    // Sort by most recently boosted
+    const sortedBoosted = boosted.sort((a, b) => {
+      const aStartDate = a.boostData?.startDate
+        ? a.boostData.startDate instanceof Date
+          ? a.boostData.startDate
+          : new Date(a.boostData.startDate)
+        : new Date();
+
+      const bStartDate = b.boostData?.startDate
+        ? b.boostData.startDate instanceof Date
+          ? b.boostData.startDate
+          : new Date(b.boostData.startDate)
+        : new Date();
+
+      return bStartDate.getTime() - aStartDate.getTime();
+    });
+
+    setActiveBoostedPitches(sortedBoosted);
+  }, [pitches]);
+
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto px-4 py-4 md:py-8">
+      {/* Page Title with Toggle */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between">
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">
+          Promoted Pitches
+        </h1>
+        <div className="flex items-center mt-3 sm:mt-0">
+          {activeBoostedPitches.length > 0 && (
+            <div className="flex items-center mr-4">
+              <span className="text-gray-400 text-sm mr-2">
+                Show Promotions
+              </span>
+              <div className="relative inline-block w-10 mr-2 align-middle select-none">
+                <input
+                  type="checkbox"
+                  id="togglePromoted"
+                  checked={showPromotedPitches}
+                  onChange={() => setShowPromotedPitches(!showPromotedPitches)}
+                  className="checked:bg-green-500 outline-none focus:outline-none right-4 checked:right-0 duration-200 ease-in absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-700 appearance-none cursor-pointer"
+                />
+                <label
+                  htmlFor="togglePromoted"
+                  className={`block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer ${
+                    showPromotedPitches ? "bg-green-700" : "bg-gray-700"
+                  }`}
+                ></label>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Display boosted pitches carousel when available */}
+      {activeBoostedPitches.length > 0 && !isEditing && showPromotedPitches && (
+        <div className="relative mb-6">
+          <div className="absolute -left-3 -top-3 bg-gradient-to-r from-green-500 to-green-600 text-white text-xs font-bold py-1 px-3 rounded-md shadow-lg transform -rotate-3 z-10">
+            <div className="flex items-center">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-3 w-3 mr-1"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                />
+              </svg>
+              Featured Pitches
+            </div>
+          </div>
+          <BoostedPitchesCarousel boostedPitches={activeBoostedPitches} />
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
@@ -2632,7 +2772,7 @@ const PitchesPage: React.FC = () => {
             <>
               <div className="mb-8">
                 <h1 className="text-3xl sm:text-4xl font-bold text-purple-500 mb-2">
-                  Find Pitches to Play Today
+                  Available Pitches
                 </h1>
                 <p className="text-gray-400 mb-6">
                   Browse available five-a-side pitches and join a team or create

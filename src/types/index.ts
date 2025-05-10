@@ -30,6 +30,15 @@ export interface Pitch {
     endDate: Date;
     transactionRef?: string;
     lastPaymentDate?: Date;
+    content?: {
+      text?: string;
+      imageUrl?: string;
+    };
+    targetLocation?: {
+      city?: string;
+      state?: string;
+      country?: string;
+    };
   };
   vests?: {
     hasVests: boolean;
