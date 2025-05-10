@@ -69,6 +69,13 @@ const BettingPage: React.FC = () => {
     new Date().toISOString().split("T")[0]
   );
 
+  // State for test funds request
+  const [showFundsRequestModal, setShowFundsRequestModal] = useState(false);
+  const [requestAmount, setRequestAmount] = useState<number>(5000);
+  const [isRequestingFunds, setIsRequestingFunds] = useState(false);
+  const [requestSuccess, setRequestSuccess] = useState(false);
+  const [hasPendingRequest, setHasPendingRequest] = useState(false);
+
   // Quick bet amounts
   const quickBetAmounts = [100, 500, 1000, 2000];
 
@@ -93,6 +100,58 @@ const BettingPage: React.FC = () => {
     // Scroll to top when component mounts
     window.scrollTo(0, 0);
   }, []);
+
+  // Check if user has a pending fund request
+  useEffect(() => {
+    const checkPendingRequests = async () => {
+      if (!currentUser) return;
+
+      try {
+        const requestsRef = collection(db, "fundRequests");
+        const q = query(
+          requestsRef,
+          where("userId", "==", currentUser.id),
+          where("status", "==", "pending")
+        );
+        const querySnapshot = await getDocs(q);
+
+        setHasPendingRequest(!querySnapshot.empty);
+      } catch (error) {
+        console.error("Error checking pending fund requests:", error);
+      }
+    };
+
+    checkPendingRequests();
+  }, [currentUser, requestSuccess]);
+
+  // Handle submitting a request for test funds
+  const submitFundRequest = async () => {
+    if (!currentUser || requestAmount <= 0 || isRequestingFunds) return;
+
+    setIsRequestingFunds(true);
+
+    try {
+      // Create a new fund request document
+      await addDoc(collection(db, "fundRequests"), {
+        userId: currentUser.id,
+        userName: currentUser.name,
+        userEmail: currentUser.email,
+        amount: requestAmount,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+
+      setRequestSuccess(true);
+      setTimeout(() => {
+        setShowFundsRequestModal(false);
+        setRequestSuccess(false);
+      }, 2000);
+    } catch (error) {
+      console.error("Error submitting fund request:", error);
+    } finally {
+      setIsRequestingFunds(false);
+    }
+  };
 
   // Fetch live matches and match history
   useEffect(() => {
@@ -831,6 +890,50 @@ const BettingPage: React.FC = () => {
 
   return (
     <div className="pb-4 px-2 sm:px-0">
+      {/* Test feature banner */}
+      <div className="mb-6 bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+        <div className="flex items-start">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 text-yellow-500 mr-3 mt-0.5 flex-shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <div>
+            <h3 className="font-bold text-yellow-500 mb-1">Test Feature</h3>
+            <p className="text-gray-300 text-sm mb-2">
+              The betting feature is currently in test mode. You can bet on real
+              matches, but no real money is involved.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                onClick={() => setShowFundsRequestModal(true)}
+                disabled={hasPendingRequest}
+                className={`px-4 py-2 text-sm font-medium rounded-md ${
+                  hasPendingRequest
+                    ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+                    : "bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30"
+                }`}
+              >
+                {hasPendingRequest ? "Request Pending" : "Request Test Funds"}
+              </button>
+              <div className="text-sm text-white bg-dark-lighter rounded-lg px-3 py-2 flex items-center">
+                <span className="text-gray-400 mr-1">Balance:</span>
+                <span className="font-bold">{formatCurrency(userBalance)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="relative mb-6 overflow-hidden rounded-lg">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/20 to-secondary/20 blur-xl"></div>
         <div className="relative p-4 flex items-center justify-between">
@@ -847,6 +950,170 @@ const BettingPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Request Test Funds Modal */}
+      {showFundsRequestModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+          <div className="bg-dark-lighter rounded-lg max-w-md w-full p-6 relative">
+            <button
+              onClick={() => {
+                setShowFundsRequestModal(false);
+                setRequestSuccess(false);
+              }}
+              className="absolute top-3 right-3 text-gray-400 hover:text-white"
+              disabled={isRequestingFunds}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-5 w-5"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+
+            {requestSuccess ? (
+              <div className="text-center py-6">
+                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-8 w-8 text-green-500"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">
+                  Request Submitted
+                </h3>
+                <p className="text-gray-400">
+                  Your test funds request has been submitted. Your wallet will
+                  be credited within 24 hours.
+                </p>
+              </div>
+            ) : (
+              <>
+                <h3 className="text-xl font-bold text-white mb-4">
+                  Request Test Funds
+                </h3>
+                <p className="text-gray-400 mb-6">
+                  Request virtual funds to test the betting features. These are
+                  not real currency and can only be used within this
+                  application.
+                </p>
+
+                <div className="mb-6">
+                  <label className="block text-sm text-gray-400 mb-2">
+                    Amount to Request
+                  </label>
+                  <div className="flex items-center bg-dark rounded-lg">
+                    <div className="px-3 py-2 text-gray-500">₦</div>
+                    <input
+                      type="text"
+                      value={requestAmount}
+                      onChange={(e) => {
+                        // Only allow numeric input
+                        const value = e.target.value.replace(/\D/g, "");
+                        if (value === "") {
+                          setRequestAmount(0);
+                        } else {
+                          const numValue = parseInt(value);
+                          // Only enforce the max limit of 10,000
+                          setRequestAmount(Math.min(10000, numValue));
+                        }
+                      }}
+                      className="bg-transparent flex-1 px-2 py-2 text-white border-none focus:outline-none"
+                      placeholder="Enter amount"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                    />
+                  </div>
+                  <div className="mt-2 text-xs text-gray-500 flex justify-between">
+                    <span>Enter any amount</span>
+                    <span>Max: ₦10,000</span>
+                  </div>
+                </div>
+
+                <div className="mb-6 bg-dark/50 p-3 rounded-lg text-sm text-gray-400">
+                  <div className="flex items-start">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <div>
+                      Your test funds will be processed and added to your
+                      account within 24 hours. You'll be able to use these funds
+                      to place bets in the app.
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={submitFundRequest}
+                  disabled={isRequestingFunds}
+                  className={`w-full py-3 rounded-lg font-medium text-white ${
+                    isRequestingFunds
+                      ? "bg-primary/50 cursor-not-allowed"
+                      : "bg-primary hover:bg-primary/90"
+                  }`}
+                >
+                  {isRequestingFunds ? (
+                    <span className="flex items-center justify-center">
+                      <svg
+                        className="animate-spin h-5 w-5 mr-2"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Processing...
+                    </span>
+                  ) : (
+                    "Request Funds"
+                  )}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {isLoading || processingRewards ? (
         <div className="flex justify-center items-center py-12">

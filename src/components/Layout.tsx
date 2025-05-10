@@ -229,7 +229,10 @@ const Layout: React.FC = () => {
   return (
     <div className="min-h-screen bg-dark flex flex-col pb-16 md:pb-0">
       {/* Top Header - for all screens */}
-      <header className="sport-gradient shadow-lg">
+      <header
+        className="sport-gradient shadow-lg"
+        style={{ position: "sticky", top: 0, zIndex: 50 }}
+      >
         {/* Desktop navigation - hidden on small screens */}
         <div className="container mx-auto justify-between items-center py-4 px-6 hidden md:flex">
           <Link to="/" className="text-2xl font-bold text-white">
@@ -318,8 +321,6 @@ const Layout: React.FC = () => {
             paddingBottom: "10px",
             backgroundColor: "rgba(36, 36, 45, 0.98)",
             backdropFilter: "blur(10px)",
-            position: "sticky",
-            top: 0,
             zIndex: 40,
           }}
         >
@@ -370,7 +371,7 @@ const Layout: React.FC = () => {
 
       <main
         className="flex-grow px-4 py-6 md:px-8"
-        style={{ paddingTop: "10px" }}
+        style={{ paddingTop: "20px" }}
       >
         <Outlet />
       </main>
