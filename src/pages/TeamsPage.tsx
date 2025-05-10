@@ -469,7 +469,7 @@ const TeamsPage: React.FC = () => {
 
         for (const doc of querySnapshot.docs) {
           try {
-            const data = doc.data();
+          const data = doc.data();
 
             // Handle date conversion properly
             let createdAtDate: Date;
@@ -487,16 +487,16 @@ const TeamsPage: React.FC = () => {
             }
 
             const team: Team = {
-              id: doc.id,
+            id: doc.id,
               name: data.name || "Unnamed Team",
-              players: data.players || [],
-              wins: data.wins || 0,
-              losses: data.losses || 0,
-              draws: data.draws || 0,
+            players: data.players || [],
+            wins: data.wins || 0,
+            losses: data.losses || 0,
+            draws: data.draws || 0,
               createdAt: createdAtDate,
-              pitchId: data.pitchId,
-              createdForDate: data.createdForDate,
-              createdBy: data.createdBy,
+            pitchId: data.pitchId,
+            createdForDate: data.createdForDate,
+            createdBy: data.createdBy,
               maxPlayers: data.maxPlayers,
             };
 
@@ -600,8 +600,8 @@ const TeamsPage: React.FC = () => {
 
       // Prepare the player object - make sure it's serializable
       const playerData = {
-        id: currentUser.id,
-        name: currentUser.name || "Anonymous Player",
+            id: currentUser.id,
+            name: currentUser.name || "Anonymous Player",
         createdAt: currentDate, // Firebase will convert this to a timestamp
       };
 

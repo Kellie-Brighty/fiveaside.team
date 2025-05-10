@@ -1576,33 +1576,37 @@ const PitchesPage: React.FC = () => {
     <div className="container mx-auto px-4 py-4 md:py-8">
       {/* Page Title with Toggle */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between">
-        <h1 className="text-2xl sm:text-3xl font-bold text-white">
-          Promoted Pitches
-        </h1>
-        <div className="flex items-center mt-3 sm:mt-0">
-          {activeBoostedPitches.length > 0 && (
-            <div className="flex items-center mr-4">
-              <span className="text-gray-400 text-sm mr-2">
-                Show Promotions
-              </span>
-              <div className="relative inline-block w-10 mr-2 align-middle select-none">
-                <input
-                  type="checkbox"
-                  id="togglePromoted"
-                  checked={showPromotedPitches}
-                  onChange={() => setShowPromotedPitches(!showPromotedPitches)}
-                  className="checked:bg-green-500 outline-none focus:outline-none right-4 checked:right-0 duration-200 ease-in absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-700 appearance-none cursor-pointer"
-                />
-                <label
-                  htmlFor="togglePromoted"
-                  className={`block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer ${
-                    showPromotedPitches ? "bg-green-700" : "bg-gray-700"
-                  }`}
-                ></label>
+        {activeBoostedPitches.length > 0 && (
+          <>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+              Promoted Pitches
+            </h1>
+            <div className="flex items-center mt-3 sm:mt-0">
+              <div className="flex items-center mr-4">
+                <span className="text-gray-400 text-sm mr-2">
+                  Show Promotions
+                </span>
+                <div className="relative inline-block w-10 mr-2 align-middle select-none">
+                  <input
+                    type="checkbox"
+                    id="togglePromoted"
+                    checked={showPromotedPitches}
+                    onChange={() =>
+                      setShowPromotedPitches(!showPromotedPitches)
+                    }
+                    className="checked:bg-green-500 outline-none focus:outline-none right-4 checked:right-0 duration-200 ease-in absolute block w-6 h-6 rounded-full bg-white border-4 border-gray-700 appearance-none cursor-pointer"
+                  />
+                  <label
+                    htmlFor="togglePromoted"
+                    className={`block overflow-hidden h-6 rounded-full bg-gray-700 cursor-pointer ${
+                      showPromotedPitches ? "bg-green-700" : "bg-gray-700"
+                    }`}
+                  ></label>
+                </div>
               </div>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* Display boosted pitches carousel when available */}

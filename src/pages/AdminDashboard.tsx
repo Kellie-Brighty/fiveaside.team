@@ -182,6 +182,35 @@ const AdminDashboard: React.FC = () => {
                   {sidebarOpen && <span className="ml-3">Fund Requests</span>}
                 </Link>
               </li>
+              <li>
+                <Link
+                  to="/admin/boosted-pitches"
+                  className={`flex items-center p-3 rounded-lg transition-colors ${
+                    location.pathname.includes("/admin/boosted-pitches")
+                      ? "bg-primary text-white"
+                      : "hover:bg-dark-light"
+                  }`}
+                  onClick={() =>
+                    window.innerWidth < 768 && setSidebarOpen(false)
+                  }
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-6 w-6"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                    />
+                  </svg>
+                  {sidebarOpen && <span className="ml-3">Boosted Pitches</span>}
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>

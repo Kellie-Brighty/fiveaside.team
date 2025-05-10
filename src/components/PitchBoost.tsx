@@ -12,10 +12,15 @@ export interface BoostOption {
 
 interface PitchBoostProps {
   email: string;
-  onSuccess: (reference: string, boostOption: BoostOption) => void;
+  onSuccess: (
+    reference: string,
+    boostOption: BoostOption,
+    numDays: number
+  ) => void;
   onClose: () => void;
   disabled?: boolean;
   selectedBoost: BoostOption;
+  numDays: number;
 }
 
 declare global {
@@ -35,25 +40,25 @@ export const BOOST_OPTIONS: BoostOption[] = [
   {
     id: "basic",
     name: "City Boost",
-    description: "Increase visibility within your city for 7 days",
+    description: "Increase visibility within your city for 1 day",
     price: 2000, // ₦2,000
-    durationDays: 7,
+    durationDays: 1,
     coverage: "local",
   },
   {
     id: "standard",
     name: "Regional Boost",
-    description: "Show your pitch to users in nearby cities for 14 days",
+    description: "Show your pitch to users in nearby cities for 1 day",
     price: 5000, // ₦5,000
-    durationDays: 14,
+    durationDays: 1,
     coverage: "regional",
   },
   {
     id: "premium",
     name: "National Boost",
-    description: "Maximum visibility across the entire country for 30 days",
+    description: "Maximum visibility across the entire country for 1 day",
     price: 10000, // ₦10,000
-    durationDays: 30,
+    durationDays: 1,
     coverage: "national",
   },
 ];
@@ -64,10 +69,13 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
   onClose,
   disabled = false,
   selectedBoost,
+  numDays,
 }) => {
   const { currentUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
+
+  const totalPrice = selectedBoost.price * numDays;
 
   const handlePayment = () => {
     if (!window.PaystackPop) {
@@ -87,7 +95,7 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
         const handler = window.PaystackPop.setup({
           key: PAYSTACK_PUBLIC_KEY, // Use environment variable
           email: email,
-          amount: selectedBoost.price * 100, // Amount in kobo
+          amount: totalPrice * 100, // Amount in kobo
           currency: "NGN",
           ref: `pitch_boost_${selectedBoost.id}_${Date.now()}_${Math.floor(
             Math.random() * 1000000
@@ -101,9 +109,9 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
                 value: selectedBoost.id,
               },
               {
-                display_name: "Duration (Days)",
-                variable_name: "duration_days",
-                value: selectedBoost.durationDays.toString(),
+                display_name: "Number of Days",
+                variable_name: "num_days",
+                value: numDays.toString(),
               },
               {
                 display_name: "User ID",
@@ -120,7 +128,7 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
           callback: (response: { reference: string }) => {
             setIsLoading(false);
             setIsInitializing(false);
-            onSuccess(response.reference, selectedBoost);
+            onSuccess(response.reference, selectedBoost, numDays);
           },
         });
 
@@ -205,7 +213,7 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
         ) : (
           <>
             <svg
-              className="w-5 h-5 mr-2"
+              className="w-5 h-5 mr-2 flex-shrink-0"
               viewBox="0 0 24 24"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
@@ -215,7 +223,13 @@ const PitchBoost: React.FC<PitchBoostProps> = ({
                 fill="currentColor"
               />
             </svg>
-            Pay ₦{selectedBoost.price.toLocaleString()} for {selectedBoost.name}
+            <span className="whitespace-normal text-center">
+              Pay ₦{totalPrice.toLocaleString()} for {selectedBoost.name}
+              <br className="sm:hidden" />
+              <span className="whitespace-nowrap">
+                ({numDays} day{numDays > 1 ? "s" : ""})
+              </span>
+            </span>
           </>
         )}
       </button>

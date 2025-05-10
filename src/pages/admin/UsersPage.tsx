@@ -245,123 +245,129 @@ const UsersPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Statistics Section */}
-      <div className="admin-card mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-gray-400 text-sm">Total Users</p>
-            <h2 className="text-2xl font-bold text-white mt-1">
-              {statsLoading ? "..." : users.length}
-            </h2>
-          </div>
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-primary"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
-          </div>
-        </div>
-      </div>
-
-      <div className="admin-card mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-gray-400 text-sm">New Users Today</p>
-            <h2 className="text-2xl font-bold text-white mt-1">
-              {statsLoading ? (
-                <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
-              ) : (
-                dailyStats.newUsers
-              )}
-            </h2>
-          </div>
-          <div className="bg-green-500/10 p-2 rounded-lg">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-green-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
-              />
-            </svg>
+      {/* Statistics Section - Add grid layout wrapper for desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {/* Total Users Card */}
+        <div className="admin-card">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-400 text-sm">Total Users</p>
+              <h2 className="text-2xl font-bold text-white mt-1">
+                {statsLoading ? "..." : users.length}
+              </h2>
+            </div>
+            <div className="bg-primary/10 p-2 rounded-lg">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 text-primary"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="admin-card mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-gray-400 text-sm">Matches Today</p>
-            <h2 className="text-2xl font-bold text-white mt-1">
-              {statsLoading ? (
-                <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
-              ) : (
-                dailyStats.matchesPlayed
-              )}
-            </h2>
-          </div>
-          <div className="bg-blue-500/10 p-2 rounded-lg">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-blue-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 10V3L4 14h7v7l9-11h-7z"
-              />
-            </svg>
+        {/* New Users Today Card */}
+        <div className="admin-card">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-400 text-sm">New Users Today</p>
+              <h2 className="text-2xl font-bold text-white mt-1">
+                {statsLoading ? (
+                  <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
+                ) : (
+                  dailyStats.newUsers
+                )}
+              </h2>
+            </div>
+            <div className="bg-green-500/10 p-2 rounded-lg">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 text-green-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                />
+              </svg>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="admin-card mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <p className="text-gray-400 text-sm">Bets Today</p>
-            <h2 className="text-2xl font-bold text-white mt-1">
-              {statsLoading ? (
-                <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
-              ) : (
-                dailyStats.betsMade
-              )}
-            </h2>
+        {/* Matches Today Card */}
+        <div className="admin-card">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-400 text-sm">Matches Today</p>
+              <h2 className="text-2xl font-bold text-white mt-1">
+                {statsLoading ? (
+                  <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
+                ) : (
+                  dailyStats.matchesPlayed
+                )}
+              </h2>
+            </div>
+            <div className="bg-blue-500/10 p-2 rounded-lg">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 text-blue-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 10V3L4 14h7v7l9-11h-7z"
+                />
+              </svg>
+            </div>
           </div>
-          <div className="bg-purple-500/10 p-2 rounded-lg">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-6 w-6 text-purple-500"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
-              />
-            </svg>
+        </div>
+
+        {/* Bets Today Card */}
+        <div className="admin-card">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-400 text-sm">Bets Today</p>
+              <h2 className="text-2xl font-bold text-white mt-1">
+                {statsLoading ? (
+                  <div className="h-8 w-8 animate-pulse bg-gray-700 rounded"></div>
+                ) : (
+                  dailyStats.betsMade
+                )}
+              </h2>
+            </div>
+            <div className="bg-purple-500/10 p-2 rounded-lg">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 text-purple-500"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+            </div>
           </div>
         </div>
       </div>

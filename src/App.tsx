@@ -19,6 +19,7 @@ import { initToast } from "./utils/toast";
 import AdminDashboard from "./pages/AdminDashboard";
 import UsersPage from "./pages/admin/UsersPage";
 import FundRequestsPage from "./pages/admin/FundRequestsPage";
+import BoostedPitchesPage from "./pages/admin/BoostedPitchesPage";
 import CreateAdminPage from "./pages/CreateAdminPage";
 
 // RequireAdmin component for protecting admin routes
@@ -79,6 +80,7 @@ const AppContent: React.FC = () => {
           <Route index element={<UsersPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="fund-requests" element={<FundRequestsPage />} />
+          <Route path="boosted-pitches" element={<BoostedPitchesPage />} />
         </Route>
 
         <Route element={<Layout />}>

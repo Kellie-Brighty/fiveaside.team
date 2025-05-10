@@ -52,6 +52,7 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
     pitch.boostData?.content?.imageUrl || null
   );
   const [isUploading, setIsUploading] = useState(false);
+  const [numDays, setNumDays] = useState<number>(1);
   const [targetLocation, setTargetLocation] = useState<{
     city?: string;
     state?: string;
@@ -172,12 +173,13 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
 
   const handlePaymentSuccess = async (
     reference: string,
-    boostOption: BoostOption
+    boostOption: BoostOption,
+    days: number
   ) => {
-    // Calculate new end date (now + duration days)
+    // Calculate new end date (now + selected number of days)
     const currentDate = new Date();
     const newEndDate = new Date(currentDate);
-    newEndDate.setDate(newEndDate.getDate() + boostOption.durationDays);
+    newEndDate.setDate(newEndDate.getDate() + days);
 
     try {
       // Upload image if available
@@ -214,8 +216,12 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
       // Provide feedback to the user
       window.toast?.success(
         isActive
-          ? `Your pitch has been boosted with ${boostOption.name}!`
-          : `Your pitch is now boosted with ${boostOption.name}!`
+          ? `Your pitch has been boosted with ${
+              boostOption.name
+            } for ${days} day${days > 1 ? "s" : ""}!`
+          : `Your pitch is now boosted with ${
+              boostOption.name
+            } for ${days} day${days > 1 ? "s" : ""}!`
       );
     } catch (error) {
       console.error("Error updating boost:", error);
@@ -225,6 +231,35 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
 
   const handlePaymentClose = () => {
     console.log("Payment closed without completion");
+  };
+
+  // Calculate total price based on selected boost and number of days
+  const totalPrice = selectedBoost.price * numDays;
+
+  // Handle days input change
+  const handleDaysChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = parseInt(e.target.value);
+    if (isNaN(value) || value < 1) {
+      setNumDays(1);
+    } else if (value > 30) {
+      setNumDays(30);
+    } else {
+      setNumDays(value);
+    }
+  };
+
+  // Increment days
+  const incrementDays = () => {
+    if (numDays < 30) {
+      setNumDays(numDays + 1);
+    }
+  };
+
+  // Decrement days
+  const decrementDays = () => {
+    if (numDays > 1) {
+      setNumDays(numDays - 1);
+    }
   };
 
   return (
@@ -446,29 +481,103 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
         </div>
 
         {/* Boost Options */}
-        <div className="grid grid-cols-1 gap-4 mb-4">
+        <div className="grid grid-cols-1 gap-4 mb-6">
           {BOOST_OPTIONS.map((boost) => (
             <div
               key={boost.id}
-              className={`border rounded-lg p-4 cursor-pointer transition-all ${
+              className={`border rounded-lg p-5 cursor-pointer transition-all ${
                 selectedBoost.id === boost.id
                   ? "border-green-500 bg-green-500/10"
                   : "border-gray-700 hover:border-gray-500"
               }`}
               onClick={() => setSelectedBoost(boost)}
             >
-              <div className="flex justify-between items-center mb-1">
-                <h4 className="font-medium">{boost.name}</h4>
-                <span className="font-bold text-green-500">
-                  ₦{boost.price.toLocaleString()}
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-2">
+                <h4 className="font-medium text-lg">{boost.name}</h4>
+                <span className="font-bold text-green-500 text-lg">
+                  ₦{boost.price.toLocaleString()}/day
                 </span>
               </div>
-              <p className="text-sm text-gray-400 mb-1">{boost.description}</p>
-              <p className="text-xs text-gray-500">
-                Duration: {boost.durationDays} days
-              </p>
+              <p className="text-sm text-gray-400">{boost.description}</p>
             </div>
           ))}
+        </div>
+
+        {/* Days Selection */}
+        <div className="mb-8">
+          <label
+            htmlFor="days"
+            className="block text-base font-medium text-gray-300 mb-3"
+          >
+            Number of Days
+          </label>
+          <div className="flex items-center max-w-xs mx-auto sm:mx-0">
+            <button
+              type="button"
+              onClick={decrementDays}
+              disabled={numDays <= 1}
+              className={`flex-none w-12 h-12 flex items-center justify-center rounded-l-lg ${
+                numDays <= 1
+                  ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  : "bg-dark text-white hover:bg-gray-700"
+              }`}
+              aria-label="Decrease days"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M3 10a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+            <input
+              type="number"
+              id="days"
+              value={numDays}
+              onChange={handleDaysChange}
+              min="1"
+              max="30"
+              className="flex-grow text-center py-3 h-12 bg-dark border-y border-gray-700 text-white text-xl font-medium focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={incrementDays}
+              disabled={numDays >= 30}
+              className={`flex-none w-12 h-12 flex items-center justify-center rounded-r-lg ${
+                numDays >= 30
+                  ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  : "bg-dark text-white hover:bg-gray-700"
+              }`}
+              aria-label="Increase days"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            </button>
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+            <p className="text-sm text-gray-400 mb-2 sm:mb-0">
+              Select between 1-30 days
+            </p>
+            <p className="text-lg font-bold text-green-500 bg-green-500/10 py-2 px-4 rounded-lg">
+              Total: ₦{totalPrice.toLocaleString()}
+            </p>
+          </div>
         </div>
 
         <PitchBoost
@@ -476,6 +585,7 @@ const BoostInfo: React.FC<BoostInfoProps> = ({
           onSuccess={handlePaymentSuccess}
           onClose={handlePaymentClose}
           selectedBoost={selectedBoost}
+          numDays={numDays}
         />
 
         <div className="text-xs text-gray-500 mt-3">
