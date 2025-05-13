@@ -967,6 +967,31 @@ const TeamsPage: React.FC = () => {
     return userTeamActivity?.createdTeamId === teamId;
   };
 
+  // Function to check if the pitch is currently open
+  const isPitchOpen = (): boolean => {
+    if (!firebasePitchData?.availability) return false;
+
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
+      .getMinutes()
+      .toString()
+      .padStart(2, "0")}`;
+    const currentDay = now
+      .toLocaleDateString("en-US", { weekday: "long" })
+      .toLowerCase();
+
+    // Check if today is a day the pitch is open
+    if (!firebasePitchData.availability.daysOpen.includes(currentDay)) {
+      return false;
+    }
+
+    // Check if current time is within opening hours
+    const openingTime = firebasePitchData.availability.openingTime;
+    const closingTime = firebasePitchData.availability.closingTime;
+
+    return currentTime >= openingTime && currentTime <= closingTime;
+  };
+
   // In Create Team form, modify to hide booking options if in private session but not the creator
   const handleAddTeam = async () => {
     if (!currentUser) {
@@ -989,6 +1014,16 @@ const TeamsPage: React.FC = () => {
     if (!canCreateTeam()) {
       window.toast?.error(
         "You are already in a team. Please leave your current team first."
+      );
+      return;
+    }
+
+    // If not in a private session, check if the pitch is currently open
+    if (!isPrivateSession && !isPitchOpen()) {
+      window.toast?.error(
+        `This pitch is currently closed. Opening hours: ${
+          firebasePitchData?.availability?.openingTime || "N/A"
+        } - ${firebasePitchData?.availability?.closingTime || "N/A"}`
       );
       return;
     }
@@ -1312,6 +1347,11 @@ const TeamsPage: React.FC = () => {
       // Generate time slots based on pitch availability
       const slots: TimeSlot[] = [];
 
+      // Get the current time to check for past slots
+      const now = new Date();
+      const currentHour = now.getHours();
+      const currentMinute = now.getMinutes();
+
       if (firebasePitchData?.availability?.bookingHours) {
         const { start, end } = firebasePitchData.availability.bookingHours;
 
@@ -1330,10 +1370,14 @@ const TeamsPage: React.FC = () => {
               (slot.startTime < startTime && slot.endTime > startTime)
           );
 
+          // Check if this slot is in the past
+          const isPast =
+            hour < currentHour || (hour === currentHour && currentMinute > 0);
+
           slots.push({
             startTime,
             endTime,
-            isAvailable: !isBooked,
+            isAvailable: !isBooked && !isPast,
           });
         }
       } else {
@@ -1349,10 +1393,14 @@ const TeamsPage: React.FC = () => {
               (slot.startTime < startTime && slot.endTime > startTime)
           );
 
+          // Check if this slot is in the past
+          const isPast =
+            hour < currentHour || (hour === currentHour && currentMinute > 0);
+
           slots.push({
             startTime,
             endTime,
-            isAvailable: !isBooked,
+            isAvailable: !isBooked && !isPast,
           });
         }
       }
@@ -1558,6 +1606,11 @@ const TeamsPage: React.FC = () => {
     setIsSessionCreator(true); // Mark user as the creator of this session
     setBookingSuccess(true);
 
+    // Get session start and end times
+    const sessionStartTime = selectedTimeSlot?.startTime || "";
+    const sessionEndTime =
+      selectedMultiSlotEndTime || selectedTimeSlot?.endTime || "";
+
     // Store private session data in localStorage for retrieval
     const sessionDataToStore = {
       id: sessionId,
@@ -1565,11 +1618,12 @@ const TeamsPage: React.FC = () => {
       date: todayDateString,
       creatorId: currentUser?.id, // Store creator ID
       timeSlot: {
-        startTime: selectedTimeSlot?.startTime || "",
-        endTime: selectedMultiSlotEndTime || selectedTimeSlot?.endTime || "",
+        startTime: sessionStartTime,
+        endTime: sessionEndTime,
         hours: selectedSlotHours,
       },
       reference: reference,
+      createdAt: new Date().toISOString(),
     };
 
     console.log("Storing session data:", sessionDataToStore);
@@ -1589,16 +1643,78 @@ const TeamsPage: React.FC = () => {
       pitchName: firebasePitchData?.name || "Booked Pitch",
       createdAt: new Date().toISOString(),
       timeSlot: {
-        startTime: selectedTimeSlot?.startTime || "",
-        endTime: selectedMultiSlotEndTime || selectedTimeSlot?.endTime || "",
+        startTime: sessionStartTime,
+        endTime: sessionEndTime,
         hours: selectedSlotHours,
       },
     };
     localStorage.setItem("userSessionLinks", JSON.stringify(userSessionLinks));
     console.log("Updated user session links in localStorage");
 
-    window.toast?.success("Payment successful! Your booking is confirmed.");
+    window.toast?.success(
+      `Payment successful! Your booking is confirmed from ${sessionStartTime} to ${sessionEndTime}.`
+    );
   };
+
+  // Function to check if private session has expired
+  const checkSessionExpiration = useCallback(() => {
+    if (!isPrivateSession || !privateSessionId) return;
+
+    // Get current time
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
+      .getMinutes()
+      .toString()
+      .padStart(2, "0")}`;
+
+    // Try to retrieve session data from localStorage
+    const storedSessionData = localStorage.getItem(
+      `privateSession_${privateSessionId}`
+    );
+
+    if (storedSessionData) {
+      try {
+        const parsedData = JSON.parse(storedSessionData);
+
+        // Check if session has an end time
+        if (parsedData.timeSlot && parsedData.timeSlot.endTime) {
+          const sessionEndTime = parsedData.timeSlot.endTime;
+
+          // If current time is past the session end time, exit the private session
+          if (currentTime >= sessionEndTime) {
+            console.log("Private session has expired. Exiting session.");
+            window.toast?.info("Your private session has ended");
+
+            // Reset session state
+            setIsPrivateSession(false);
+            setPrivateSessionId(null);
+            setPrivateSessionLink("");
+            setIsSessionCreator(false);
+
+            // Remove the session ID from URL if it exists
+            const url = new URL(window.location.href);
+            url.searchParams.delete("session");
+            window.history.replaceState({}, document.title, url.toString());
+
+            // Refresh teams to show all teams now
+            fetchTeams();
+          }
+        }
+      } catch (error) {
+        console.error("Error checking session expiration:", error);
+      }
+    }
+  }, [isPrivateSession, privateSessionId, fetchTeams]);
+
+  // Periodically check for session expiration (every minute)
+  useEffect(() => {
+    const intervalId = setInterval(checkSessionExpiration, 60000);
+
+    // Also check on component mount
+    checkSessionExpiration();
+
+    return () => clearInterval(intervalId);
+  }, [checkSessionExpiration]);
 
   // Check for session ID in URL - moved to mount only once, outside of dependency array
   useEffect(() => {
@@ -1623,20 +1739,39 @@ const TeamsPage: React.FC = () => {
         localStorage.setItem("selectedPitchId", pitchParam);
       }
 
-      // Set private session regardless of pitch ID first to ensure access
-      setPrivateSessionId(sessionParam);
-      setIsPrivateSession(true);
-      console.log("Private session enabled with ID:", sessionParam);
-
       // Try to retrieve session data from localStorage
       const storedSessionData = localStorage.getItem(
         `privateSession_${sessionParam}`
       );
 
+      // Get current time to check for expired sessions
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}`;
+
       if (storedSessionData) {
         try {
           const parsedData = JSON.parse(storedSessionData);
           console.log("Found session data in localStorage:", parsedData);
+
+          // Check if session has already expired based on end time
+          if (parsedData.timeSlot && parsedData.timeSlot.endTime) {
+            if (currentTime >= parsedData.timeSlot.endTime) {
+              console.log("Session has expired:", sessionParam);
+              window.toast?.info(
+                "The requested private session has already ended"
+              );
+
+              // Don't enable the private session if it's expired
+              // Remove the session parameter from URL
+              const url = new URL(window.location.href);
+              url.searchParams.delete("session");
+              window.history.replaceState({}, document.title, url.toString());
+              return;
+            }
+          }
 
           // If needed, update selected pitch to match the session's pitch
           if (
@@ -1664,6 +1799,11 @@ const TeamsPage: React.FC = () => {
           setPrivateSessionLink(recreatedLink);
           console.log("Recreated session link:", recreatedLink);
 
+          // Set private session regardless of pitch ID first to ensure access
+          setPrivateSessionId(sessionParam);
+          setIsPrivateSession(true);
+          console.log("Private session enabled with ID:", sessionParam);
+
           window.toast?.info("You've joined a private booking session");
         } catch (error) {
           console.error("Error parsing session data:", error);
@@ -1671,6 +1811,12 @@ const TeamsPage: React.FC = () => {
       } else {
         console.warn("No session data found for session ID:", sessionParam);
         // Even if we don't have session data, we still use the session ID from URL
+
+        // Set private session regardless of pitch ID first to ensure access
+        setPrivateSessionId(sessionParam);
+        setIsPrivateSession(true);
+        console.log("Private session enabled with ID:", sessionParam);
+
         window.toast?.info("You've joined a private booking session");
       }
     }
@@ -1740,14 +1886,35 @@ const TeamsPage: React.FC = () => {
         localStorage.getItem("userSessionLinks") || "{}"
       );
 
+      // Get current time to check for expired sessions
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, "0")}:${now
+        .getMinutes()
+        .toString()
+        .padStart(2, "0")}`;
+
       // Find session for today and current pitch
       const currentPitchSession = Object.entries(userSessionLinks).find(
         ([_, data]) => {
           const typedData = data as SessionData;
-          return (
+
+          // Check if session matches today's date and pitch
+          const matchesPitchAndDate =
             typedData.pitchId === selectedPitch &&
-            typedData.date === todayDateString
-          );
+            typedData.date === todayDateString;
+
+          if (!matchesPitchAndDate) return false;
+
+          // Check if session has already expired based on end time
+          if (typedData.timeSlot && typedData.timeSlot.endTime) {
+            // Don't restore if the session's end time has passed
+            if (currentTime >= typedData.timeSlot.endTime) {
+              console.log("Not restoring expired session:", typedData);
+              return false;
+            }
+          }
+
+          return true;
         }
       );
 
