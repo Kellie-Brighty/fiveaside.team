@@ -29,6 +29,21 @@ interface PitchSettings {
   pricePerPerson?: number; // Price per person in Naira
 }
 
+// Define the Availability type separately
+interface Availability {
+  daysOpen: string[];
+  openingTime: string;
+  closingTime: string;
+  bookingHours?: {
+    start?: string;
+    end?: string;
+  };
+  openBookingHours?: {
+    start?: string;
+    end?: string;
+  };
+}
+
 interface Pitch {
   id: string;
   name: string;
@@ -46,10 +61,14 @@ interface Pitch {
   createdAt: Date;
   referees: string[];
   customSettings?: PitchSettings;
-  availability: {
-    daysOpen: string[];
-    openingTime: string;
-    closingTime: string;
+  availability: Availability;
+  bookingSettings: {
+    allowOnlineBooking: boolean; // Whether to allow online booking
+    allowOpenBooking: boolean; // Whether to allow open booking (physical payment)
+    onlinePaymentType: "timeSlot" | "perHead"; // Payment type for online bookings
+    onlineTimeSlotPrice?: number; // Price per time slot for online bookings (in Naira)
+    physicalPaymentType: "timeSlot" | "perHead"; // Payment type for physical bookings
+    physicalTimeSlotPrice?: number; // Price per time slot for physical bookings (in Naira)
   };
   ownerId: string;
   pricePerPerson?: number; // Price per person in Naira
@@ -130,6 +149,18 @@ const mockPitches: Pitch[] = [
       closingTime: "22:00",
     },
     pricePerPerson: 3000, // 3,000 Naira per person
+    bookingSettings: {
+      allowOnlineBooking: true,
+      allowOpenBooking: true,
+      onlinePaymentType: "perHead",
+      physicalPaymentType: "perHead",
+      onlineTimeSlotPrice: 5000,
+      physicalTimeSlotPrice: 5000,
+    },
+    vests: {
+      hasVests: false,
+      colors: [],
+    },
   },
   {
     id: "pitch2",
@@ -160,6 +191,18 @@ const mockPitches: Pitch[] = [
       closingTime: "21:00",
     },
     pricePerPerson: 2500, // 2,500 Naira per person
+    bookingSettings: {
+      allowOnlineBooking: true,
+      allowOpenBooking: true,
+      onlinePaymentType: "timeSlot",
+      physicalPaymentType: "perHead",
+      onlineTimeSlotPrice: 4500,
+      physicalTimeSlotPrice: 4000,
+    },
+    vests: {
+      hasVests: false,
+      colors: [],
+    },
   },
   {
     id: "pitch3",
@@ -190,6 +233,18 @@ const mockPitches: Pitch[] = [
       closingTime: "23:00",
     },
     pricePerPerson: 2000, // 2,000 Naira per person
+    bookingSettings: {
+      allowOnlineBooking: false,
+      allowOpenBooking: true,
+      onlinePaymentType: "perHead",
+      physicalPaymentType: "timeSlot",
+      onlineTimeSlotPrice: 3000,
+      physicalTimeSlotPrice: 3500,
+    },
+    vests: {
+      hasVests: false,
+      colors: [],
+    },
   },
   {
     id: "pitch4",
@@ -227,6 +282,18 @@ const mockPitches: Pitch[] = [
       closingTime: "23:00",
     },
     pricePerPerson: 1500, // 1,500 Naira per person
+    bookingSettings: {
+      allowOnlineBooking: true,
+      allowOpenBooking: true,
+      onlinePaymentType: "perHead",
+      physicalPaymentType: "perHead",
+      onlineTimeSlotPrice: 2500,
+      physicalTimeSlotPrice: 2000,
+    },
+    vests: {
+      hasVests: false,
+      colors: [],
+    },
   },
 ];
 
@@ -655,14 +722,31 @@ const PitchesPage: React.FC = () => {
         ],
         openingTime: "08:00",
         closingTime: "22:00",
+        bookingHours: {
+          start: "08:00",
+          end: "22:00",
+        },
+        openBookingHours: {
+          start: "08:00",
+          end: "22:00",
+        },
       },
+      bookingSettings: {
+        allowOnlineBooking: true,
+        allowOpenBooking: true,
+        onlinePaymentType: "perHead",
+        physicalPaymentType: "perHead",
+        onlineTimeSlotPrice: 5000, // Default price of 5000 Naira per time slot
+        physicalTimeSlotPrice: 5000, // Default price of 5000 Naira per time slot
+      },
+      ownerId: currentUser?.id || "",
       customSettings: {
         matchDuration: 900, // 15 minutes default
         maxGoals: 7,
         allowDraws: false,
         maxPlayersPerTeam: 5,
       },
-      pricePerPerson: 3000,
+      pricePerPerson: 3000, // Default price of 3000 Naira per person
       vests: {
         hasVests: false,
         colors: [],
@@ -1572,6 +1656,104 @@ const PitchesPage: React.FC = () => {
     setActiveBoostedPitches(sortedBoosted);
   }, [pitches]);
 
+  // Helper function to safely update availability
+  // const getUpdatedAvailability = (
+  //   currentAvailability: Partial<Availability> | undefined,
+  //   updates: Partial<Availability>
+  // ): Availability => {
+  //   const daysOpen = currentAvailability?.daysOpen || [
+  //     "monday",
+  //     "tuesday",
+  //     "wednesday",
+  //     "thursday",
+  //     "friday",
+  //     "saturday",
+  //     "sunday",
+  //   ];
+  //   const openingTime = currentAvailability?.openingTime || "08:00";
+  //   const closingTime = currentAvailability?.closingTime || "22:00";
+
+  //   return {
+  //     daysOpen,
+  //     openingTime,
+  //     closingTime,
+  //     ...updates,
+  //   };
+  // };
+
+  // Helper function to ensure availability is complete and valid
+  const ensureCompleteAvailability = (
+    availability: Partial<Availability> | undefined
+  ): Availability => {
+    const defaultStartTime = "08:00";
+    const defaultEndTime = "22:00";
+
+    return {
+      daysOpen: availability?.daysOpen || [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+      ],
+      openingTime: availability?.openingTime || defaultStartTime,
+      closingTime: availability?.closingTime || defaultEndTime,
+      bookingHours: {
+        start:
+          availability?.bookingHours?.start ||
+          availability?.openingTime ||
+          defaultStartTime,
+        end:
+          availability?.bookingHours?.end ||
+          availability?.closingTime ||
+          defaultEndTime,
+      },
+      openBookingHours: {
+        start:
+          availability?.openBookingHours?.start ||
+          availability?.openingTime ||
+          defaultStartTime,
+        end:
+          availability?.openBookingHours?.end ||
+          availability?.closingTime ||
+          defaultEndTime,
+      },
+    };
+  };
+
+  // Use this in a form update
+  const updateFormAvailability = (updates: Partial<Availability>): void => {
+    // Create a complete valid availability object
+    const currentAvailability = ensureCompleteAvailability(
+      formData.availability
+    );
+
+    // Handle special case of bookingHours and openBookingHours updates
+    if (updates.bookingHours) {
+      updates.bookingHours = {
+        start: updates.bookingHours.start || "08:00",
+        end: updates.bookingHours.end || "22:00",
+      };
+    }
+
+    if (updates.openBookingHours) {
+      updates.openBookingHours = {
+        start: updates.openBookingHours.start || "08:00",
+        end: updates.openBookingHours.end || "22:00",
+      };
+    }
+
+    setFormData({
+      ...formData,
+      availability: {
+        ...currentAvailability,
+        ...updates,
+      },
+    });
+  };
+
   return (
     <div className="container mx-auto px-4 py-4 md:py-8">
       {/* Page Title with Toggle */}
@@ -1631,7 +1813,17 @@ const PitchesPage: React.FC = () => {
               Featured Pitches
             </div>
           </div>
-          <BoostedPitchesCarousel boostedPitches={activeBoostedPitches} />
+          <BoostedPitchesCarousel
+            boostedPitches={activeBoostedPitches.map((pitch) => ({
+              ...pitch,
+              availability: {
+                ...pitch.availability,
+                daysOpen: pitch.availability.daysOpen || [],
+                openingTime: pitch.availability.openingTime || "08:00",
+                closingTime: pitch.availability.closingTime || "22:00",
+              },
+            }))}
+          />
         </div>
       )}
 
@@ -2070,6 +2262,376 @@ const PitchesPage: React.FC = () => {
                         </p>
                       </div>
 
+                      {/* Booking Settings */}
+                      <div>
+                        <h3 className="text-md font-medium text-gray-300 mb-2">
+                          Booking Settings
+                        </h3>
+                        <div className="bg-dark rounded-lg p-4 space-y-6">
+                          {/* Booking Types */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="checkbox"
+                                id="allowOnlineBooking"
+                                checked={
+                                  formData.bookingSettings
+                                    ?.allowOnlineBooking ?? true
+                                }
+                                onChange={(e) => {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    bookingSettings: {
+                                      ...(prev.bookingSettings || {
+                                        allowOnlineBooking: true,
+                                        allowOpenBooking: true,
+                                        onlinePaymentType: "perHead",
+                                        onlineTimeSlotPrice: 5000,
+                                        physicalPaymentType: "perHead",
+                                        physicalTimeSlotPrice: 5000,
+                                      }),
+                                      allowOnlineBooking: e.target.checked,
+                                    },
+                                  }));
+                                }}
+                                className="h-4 w-4 text-green-500 rounded border-gray-700 focus:ring-green-500 bg-dark-light"
+                              />
+                              <label
+                                htmlFor="allowOnlineBooking"
+                                className="text-sm text-gray-300"
+                              >
+                                Allow Online Booking (Remote Payment)
+                              </label>
+                            </div>
+                            <div className="flex items-center space-x-3">
+                              <input
+                                type="checkbox"
+                                id="allowOpenBooking"
+                                checked={
+                                  formData.bookingSettings?.allowOpenBooking ??
+                                  true
+                                }
+                                onChange={(e) => {
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    bookingSettings: {
+                                      ...(prev.bookingSettings || {
+                                        allowOnlineBooking: true,
+                                        allowOpenBooking: true,
+                                        onlinePaymentType: "perHead",
+                                        onlineTimeSlotPrice: 5000,
+                                        physicalPaymentType: "perHead",
+                                        physicalTimeSlotPrice: 5000,
+                                      }),
+                                      allowOpenBooking: e.target.checked,
+                                    },
+                                  }));
+                                }}
+                                className="h-4 w-4 text-green-500 rounded border-gray-700 focus:ring-green-500 bg-dark-light"
+                              />
+                              <label
+                                htmlFor="allowOpenBooking"
+                                className="text-sm text-gray-300"
+                              >
+                                Allow Open Booking (Physical Payment)
+                              </label>
+                            </div>
+                          </div>
+
+                          {/* Online Booking Section */}
+                          {formData.bookingSettings?.allowOnlineBooking && (
+                            <div className="border border-green-800/30 bg-green-900/10 rounded-lg p-4 space-y-4">
+                              <h4 className="text-md font-medium text-green-500 mb-2 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                                  />
+                                </svg>
+                                Online Booking Settings
+                              </h4>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Online Payment Type
+                                </label>
+                                <div className="flex space-x-4">
+                                  <div className="flex items-center">
+                                    <input
+                                      type="radio"
+                                      id="onlinePaymentTypePerHead"
+                                      name="onlinePaymentType"
+                                      value="perHead"
+                                      checked={
+                                        (formData.bookingSettings
+                                          ?.onlinePaymentType || "perHead") ===
+                                        "perHead"
+                                      }
+                                      onChange={() => {
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          bookingSettings: {
+                                            ...(prev.bookingSettings || {
+                                              allowOnlineBooking: true,
+                                              allowOpenBooking: true,
+                                              onlinePaymentType: "perHead",
+                                              onlineTimeSlotPrice: 5000,
+                                              physicalPaymentType: "perHead",
+                                              physicalTimeSlotPrice: 5000,
+                                            }),
+                                            onlinePaymentType: "perHead",
+                                          },
+                                        }));
+                                      }}
+                                      className="h-4 w-4 text-green-500 border-gray-700 focus:ring-green-500 bg-dark-light"
+                                    />
+                                    <label
+                                      htmlFor="onlinePaymentTypePerHead"
+                                      className="ml-2 text-sm text-gray-300"
+                                    >
+                                      Per Head (Each player pays individually)
+                                    </label>
+                                  </div>
+                                  <div className="flex items-center">
+                                    <input
+                                      type="radio"
+                                      id="onlinePaymentTypeTimeSlot"
+                                      name="onlinePaymentType"
+                                      value="timeSlot"
+                                      checked={
+                                        (formData.bookingSettings
+                                          ?.onlinePaymentType || "perHead") ===
+                                        "timeSlot"
+                                      }
+                                      onChange={() => {
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          bookingSettings: {
+                                            ...(prev.bookingSettings || {
+                                              allowOnlineBooking: true,
+                                              allowOpenBooking: true,
+                                              onlinePaymentType: "perHead",
+                                              onlineTimeSlotPrice: 5000,
+                                              physicalPaymentType: "perHead",
+                                              physicalTimeSlotPrice: 5000,
+                                            }),
+                                            onlinePaymentType: "timeSlot",
+                                          },
+                                        }));
+                                      }}
+                                      className="h-4 w-4 text-green-500 border-gray-700 focus:ring-green-500 bg-dark-light"
+                                    />
+                                    <label
+                                      htmlFor="onlinePaymentTypeTimeSlot"
+                                      className="ml-2 text-sm text-gray-300"
+                                    >
+                                      Time Slot (One payment for entire time
+                                      slot)
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Online Time Slot Price */}
+                              {formData.bookingSettings?.onlinePaymentType ===
+                                "timeSlot" && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                                    Online Price per Time Slot (₦)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={
+                                      formData.bookingSettings
+                                        ?.onlineTimeSlotPrice || 5000
+                                    }
+                                    onChange={(e) => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        bookingSettings: {
+                                          ...(prev.bookingSettings || {
+                                            allowOnlineBooking: true,
+                                            allowOpenBooking: true,
+                                            onlinePaymentType: "timeSlot",
+                                            onlineTimeSlotPrice: 5000,
+                                            physicalPaymentType: "perHead",
+                                            physicalTimeSlotPrice: 5000,
+                                          }),
+                                          onlineTimeSlotPrice: parseInt(
+                                            e.target.value
+                                          ),
+                                        },
+                                      }));
+                                    }}
+                                    min="1000"
+                                    className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                                    placeholder="e.g. 5000"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    This is the amount to charge for booking a
+                                    time slot online
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Physical Booking Section */}
+                          {formData.bookingSettings?.allowOpenBooking && (
+                            <div className="border border-blue-800/30 bg-blue-900/10 rounded-lg p-4 space-y-4">
+                              <h4 className="text-md font-medium text-blue-500 mb-2 flex items-center">
+                                <svg
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  className="h-5 w-5 mr-2"
+                                  fill="none"
+                                  viewBox="0 0 24 24"
+                                  stroke="currentColor"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2z"
+                                  />
+                                </svg>
+                                Physical Booking Settings
+                              </h4>
+
+                              <div>
+                                <label className="block text-sm font-medium text-gray-300 mb-2">
+                                  Physical Payment Type
+                                </label>
+                                <div className="flex space-x-4">
+                                  <div className="flex items-center">
+                                    <input
+                                      type="radio"
+                                      id="physicalPaymentTypePerHead"
+                                      name="physicalPaymentType"
+                                      value="perHead"
+                                      checked={
+                                        (formData.bookingSettings
+                                          ?.physicalPaymentType ||
+                                          "perHead") === "perHead"
+                                      }
+                                      onChange={() => {
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          bookingSettings: {
+                                            ...(prev.bookingSettings || {
+                                              allowOnlineBooking: true,
+                                              allowOpenBooking: true,
+                                              onlinePaymentType: "perHead",
+                                              onlineTimeSlotPrice: 5000,
+                                              physicalPaymentType: "perHead",
+                                              physicalTimeSlotPrice: 5000,
+                                            }),
+                                            physicalPaymentType: "perHead",
+                                          },
+                                        }));
+                                      }}
+                                      className="h-4 w-4 text-blue-500 border-gray-700 focus:ring-blue-500 bg-dark-light"
+                                    />
+                                    <label
+                                      htmlFor="physicalPaymentTypePerHead"
+                                      className="ml-2 text-sm text-gray-300"
+                                    >
+                                      Per Head (Each player pays individually)
+                                    </label>
+                                  </div>
+                                  <div className="flex items-center">
+                                    <input
+                                      type="radio"
+                                      id="physicalPaymentTypeTimeSlot"
+                                      name="physicalPaymentType"
+                                      value="timeSlot"
+                                      checked={
+                                        (formData.bookingSettings
+                                          ?.physicalPaymentType ||
+                                          "perHead") === "timeSlot"
+                                      }
+                                      onChange={() => {
+                                        setFormData((prev) => ({
+                                          ...prev,
+                                          bookingSettings: {
+                                            ...(prev.bookingSettings || {
+                                              allowOnlineBooking: true,
+                                              allowOpenBooking: true,
+                                              onlinePaymentType: "perHead",
+                                              onlineTimeSlotPrice: 5000,
+                                              physicalPaymentType: "perHead",
+                                              physicalTimeSlotPrice: 5000,
+                                            }),
+                                            physicalPaymentType: "timeSlot",
+                                          },
+                                        }));
+                                      }}
+                                      className="h-4 w-4 text-blue-500 border-gray-700 focus:ring-blue-500 bg-dark-light"
+                                    />
+                                    <label
+                                      htmlFor="physicalPaymentTypeTimeSlot"
+                                      className="ml-2 text-sm text-gray-300"
+                                    >
+                                      Time Slot (One payment for entire time
+                                      slot)
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Physical Time Slot Price */}
+                              {formData.bookingSettings?.physicalPaymentType ===
+                                "timeSlot" && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-300 mb-1">
+                                    Physical Payment Price per Time Slot (₦)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    value={
+                                      formData.bookingSettings
+                                        ?.physicalTimeSlotPrice || 5000
+                                    }
+                                    onChange={(e) => {
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        bookingSettings: {
+                                          ...(prev.bookingSettings || {
+                                            allowOnlineBooking: true,
+                                            allowOpenBooking: true,
+                                            onlinePaymentType: "perHead",
+                                            onlineTimeSlotPrice: 5000,
+                                            physicalPaymentType: "timeSlot",
+                                            physicalTimeSlotPrice: 5000,
+                                          }),
+                                          physicalTimeSlotPrice: parseInt(
+                                            e.target.value
+                                          ),
+                                        },
+                                      }));
+                                    }}
+                                    min="1000"
+                                    className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                                    placeholder="e.g. 5000"
+                                  />
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    This is the amount to charge for booking a
+                                    time slot with physical payment
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                           Location Picker
@@ -2403,6 +2965,181 @@ const PitchesPage: React.FC = () => {
                             </p>
                           )}
                         </div>
+                      </div>
+
+                      {/* Hours Settings */}
+                      <div>
+                        <h3 className="text-md font-medium text-gray-300 mb-2">
+                          Opening Hours
+                        </h3>
+                        <div className="bg-dark rounded-lg p-4 space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Opening Time
+                              </label>
+                              <input
+                                type="time"
+                                value={
+                                  formData.availability?.openingTime || "08:00"
+                                }
+                                onChange={(e) => {
+                                  updateFormAvailability({
+                                    ...formData.availability,
+                                    openingTime: e.target.value,
+                                  });
+                                }}
+                                className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-300 mb-1">
+                                Closing Time
+                              </label>
+                              <input
+                                type="time"
+                                value={
+                                  formData.availability?.closingTime || "22:00"
+                                }
+                                onChange={(e) => {
+                                  updateFormAvailability({
+                                    ...formData.availability,
+                                    closingTime: e.target.value,
+                                  });
+                                }}
+                                className="w-full bg-dark-light border border-gray-700 rounded-md px-3 py-2 text-white"
+                              />
+                            </div>
+                          </div>
+
+                          <h4 className="text-sm font-medium text-gray-300 mt-2">
+                            Online Booking Hours
+                          </h4>
+                          <p className="text-xs text-gray-500 mb-2">
+                            When can players book your pitch online? Defaults to
+                            same as opening hours.
+                          </p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">
+                                Start Time
+                              </label>
+                              <input
+                                type="time"
+                                value={
+                                  formData.availability?.bookingHours?.start ||
+                                  formData.availability?.openingTime ||
+                                  "08:00"
+                                }
+                                onChange={(e) => {
+                                  updateFormAvailability({
+                                    ...formData.availability,
+                                    bookingHours: {
+                                      ...((
+                                        formData.availability as Partial<Availability>
+                                      )?.bookingHours || {}),
+                                      start: e.target.value,
+                                    },
+                                  });
+                                }}
+                                className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs text-gray-400 mb-1">
+                                End Time
+                              </label>
+                              <input
+                                type="time"
+                                value={
+                                  formData.availability?.bookingHours?.end ||
+                                  formData.availability?.closingTime ||
+                                  "22:00"
+                                }
+                                onChange={(e) => {
+                                  updateFormAvailability({
+                                    ...formData.availability,
+                                    bookingHours: {
+                                      ...((
+                                        formData.availability as Partial<Availability>
+                                      )?.bookingHours || {}),
+                                      end: e.target.value,
+                                    },
+                                  });
+                                }}
+                                className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500"
+                              />
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-1">
+                            Set the hours when this pitch is available for
+                            online booking
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Open Booking Hours */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-1">
+                          Open/Physical Booking Hours
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">
+                              Start Time
+                            </label>
+                            <input
+                              type="time"
+                              value={
+                                formData.availability?.openBookingHours
+                                  ?.start ||
+                                formData.availability?.openingTime ||
+                                "08:00"
+                              }
+                              onChange={(e) => {
+                                updateFormAvailability({
+                                  ...formData.availability,
+                                  openBookingHours: {
+                                    ...((
+                                      formData.availability as Partial<Availability>
+                                    )?.openBookingHours || {}),
+                                    start: e.target.value,
+                                  },
+                                });
+                              }}
+                              className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">
+                              End Time
+                            </label>
+                            <input
+                              type="time"
+                              value={
+                                formData.availability?.openBookingHours?.end ||
+                                formData.availability?.closingTime ||
+                                "22:00"
+                              }
+                              onChange={(e) => {
+                                updateFormAvailability({
+                                  ...formData.availability,
+                                  openBookingHours: {
+                                    ...((
+                                      formData.availability as Partial<Availability>
+                                    )?.openBookingHours || {}),
+                                    end: e.target.value,
+                                  },
+                                });
+                              }}
+                              className="w-full bg-dark border border-gray-700 rounded-lg px-3 py-2 text-white placeholder-gray-500"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Set the hours when this pitch is available for
+                          physical/open booking
+                        </p>
                       </div>
                     </div>
 
@@ -3158,7 +3895,7 @@ const PitchesPage: React.FC = () => {
                     <div className="flex justify-between">
                       <span className="text-gray-400">Days Open:</span>
                       <span className="text-white">
-                        {modalPitch.availability.daysOpen
+                        {(modalPitch.availability.daysOpen || [])
                           .map(
                             (day) => day.charAt(0).toUpperCase() + day.slice(1)
                           )
@@ -3172,6 +3909,15 @@ const PitchesPage: React.FC = () => {
                         {modalPitch.availability.closingTime}
                       </span>
                     </div>
+                    {modalPitch.availability.bookingHours && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Booking Hours:</span>
+                        <span className="text-white">
+                          {modalPitch.availability.bookingHours.start} -{" "}
+                          {modalPitch.availability.bookingHours.end}
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between">
                       <span className="text-gray-400">Price per Person:</span>
                       <span className="text-purple-500 font-medium">
@@ -3181,6 +3927,95 @@ const PitchesPage: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Add new section for booking settings */}
+              {modalPitch.bookingSettings && (
+                <div className="bg-dark rounded-lg p-4 mb-6">
+                  <h3 className="font-medium text-gray-300 mb-3">
+                    Booking Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      {modalPitch.bookingSettings.allowOnlineBooking && (
+                        <span className="bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-sm">
+                          Online Booking Available
+                        </span>
+                      )}
+                      {modalPitch.bookingSettings.allowOpenBooking && (
+                        <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full text-sm">
+                          Physical Payment Accepted
+                        </span>
+                      )}
+                      {!modalPitch.bookingSettings.allowOnlineBooking &&
+                        !modalPitch.bookingSettings.allowOpenBooking && (
+                          <span className="bg-red-500/20 text-red-400 px-2 py-1 rounded-full text-sm">
+                            No Booking Available
+                          </span>
+                        )}
+                    </div>
+
+                    {modalPitch.bookingSettings.allowOnlineBooking && (
+                      <>
+                        <div className="flex justify-between pt-2">
+                          <span className="text-gray-400">
+                            Online Payment Type:
+                          </span>
+                          <span className="text-white">
+                            {modalPitch.bookingSettings.onlinePaymentType ===
+                            "timeSlot"
+                              ? "Per Time Slot"
+                              : "Per Player (Per Head)"}
+                          </span>
+                        </div>
+
+                        {modalPitch.bookingSettings.onlinePaymentType ===
+                          "timeSlot" &&
+                          modalPitch.bookingSettings.onlineTimeSlotPrice && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">
+                                Online Time Slot Price:
+                              </span>
+                              <span className="text-purple-500 font-medium">
+                                ₦
+                                {modalPitch.bookingSettings.onlineTimeSlotPrice.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                      </>
+                    )}
+
+                    {modalPitch.bookingSettings.allowOpenBooking && (
+                      <>
+                        <div className="flex justify-between pt-2">
+                          <span className="text-gray-400">
+                            Physical Payment Type:
+                          </span>
+                          <span className="text-white">
+                            {modalPitch.bookingSettings.physicalPaymentType ===
+                            "timeSlot"
+                              ? "Per Time Slot"
+                              : "Per Player (Per Head)"}
+                          </span>
+                        </div>
+
+                        {modalPitch.bookingSettings.physicalPaymentType ===
+                          "timeSlot" &&
+                          modalPitch.bookingSettings.physicalTimeSlotPrice && (
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">
+                                Physical Time Slot Price:
+                              </span>
+                              <span className="text-blue-500 font-medium">
+                                ₦
+                                {modalPitch.bookingSettings.physicalTimeSlotPrice.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {modalPitch.coordinates && (
                 <div className="mb-6">
