@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import shortLogo from "../assets/short-logo.png";
 
 const LoadingScreen: React.FC = () => {
   const [dots, setDots] = useState(1);
@@ -67,28 +68,14 @@ const LoadingScreen: React.FC = () => {
 
         <div className="text-center absolute left-1/2 transform -translate-x-1/2">
           <div className="flex items-center justify-center mb-4">
-            {["M", "o", "n", "k", "e", "y", "P", "o", "s", "t"].map(
-              (letter, i) => (
-                <span
-                  key={i}
-                  className="inline-block text-5xl font-bold"
-                  style={{
-                    animationName: "letterBounce",
-                    animationDuration: "2s",
-                    animationDelay: `${i * 0.1}s`,
-                    animationIterationCount: "infinite",
-                    animationTimingFunction: "ease-in-out",
-                    background:
-                      "linear-gradient(135deg, #b53bff 0%, #ff3bda 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    filter: "drop-shadow(0 0 10px rgba(255, 59, 218, 0.8))",
-                  }}
-                >
-                  {letter}
-                </span>
-              )
-            )}
+            <img
+              src={shortLogo}
+              alt="MonkeyPost"
+              className="h-24 w-auto animate-pulse"
+              style={{
+                filter: "drop-shadow(0 0 20px rgba(181, 59, 255, 0.6))",
+              }}
+            />
           </div>
 
           <div className="relative mt-8 bg-dark-light/30 rounded-lg p-4 backdrop-blur-sm border border-dark-light">
@@ -119,16 +106,6 @@ const LoadingScreen: React.FC = () => {
           }
           100% {
             transform: rotate(360deg);
-          }
-        }
-
-        @keyframes letterBounce {
-          0%,
-          100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-15px);
           }
         }
 

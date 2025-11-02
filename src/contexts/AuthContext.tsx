@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import type { ReactNode } from "react";
-import type { User } from "../types";
+import type { User, UserRole } from "../types";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -60,6 +60,13 @@ interface AuthContextType {
   isReferee: boolean;
   isPitchOwner: boolean;
   isAdmin: boolean;
+  // Phase 2: New role checkers
+  isClubManager: boolean;
+  isScout: boolean;
+  isServiceProvider: boolean;
+  isMinistryOfficial: boolean;
+  isFAOfficial: boolean;
+  isFacilityManager: boolean;
   userPitches: string[];
   ownedPitches: string[];
   isLoading: boolean;
@@ -69,9 +76,23 @@ interface AuthContextType {
   signup: (
     email: string,
     password: string,
-    role: "player" | "referee" | "pitch_owner"
+    role: UserRole,
+    profileData?: {
+      name?: string;
+      location?: {
+        city: string;
+        state: string;
+        coordinates?: {
+          latitude: number;
+          longitude: number;
+        };
+      };
+      bio?: string;
+      scoutOrganization?: string;
+    }
   ) => Promise<void>;
   adminSignup: (email: string, password: string) => Promise<void>;
+  updateUserProfile: (profileData: Partial<User>) => Promise<void>;
   logout: () => Promise<void>;
   joinPitch: (pitchId: string) => Promise<void>;
   sessionId: string | null;
@@ -83,6 +104,12 @@ const AuthContext = createContext<AuthContextType>({
   isReferee: false,
   isPitchOwner: false,
   isAdmin: false,
+  isClubManager: false,
+  isScout: false,
+  isServiceProvider: false,
+  isMinistryOfficial: false,
+  isFAOfficial: false,
+  isFacilityManager: false,
   userPitches: [],
   ownedPitches: [],
   isLoading: true,
@@ -91,6 +118,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   signup: async () => {},
   adminSignup: async () => {},
+  updateUserProfile: async () => {},
   logout: async () => {},
   joinPitch: async () => {},
   sessionId: null,
@@ -200,6 +228,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const isReferee = Boolean(currentUser?.role === "referee");
   const isPitchOwner = Boolean(currentUser?.role === "pitch_owner");
   const isAdmin = Boolean(currentUser?.role === "admin");
+  // Phase 2: New role checkers
+  const isClubManager = Boolean(currentUser?.role === "club_manager");
+  const isScout = Boolean(currentUser?.role === "scout");
+  const isServiceProvider = Boolean(currentUser?.role === "service_provider");
+  const isMinistryOfficial = Boolean(currentUser?.role === "ministry_official");
+  const isFAOfficial = Boolean(currentUser?.role === "fa_official");
+  const isFacilityManager = Boolean(currentUser?.role === "facility_manager");
   const userPitches = currentUser?.memberOfPitches || [];
   const ownedPitches = currentUser?.ownedPitches || [];
 
@@ -263,7 +298,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signup = async (
     email: string,
     password: string,
-    role: "player" | "referee" | "pitch_owner"
+    role: UserRole,
+    profileData?: {
+      name?: string;
+      location?: {
+        city: string;
+        state: string;
+        coordinates?: {
+          latitude: number;
+          longitude: number;
+        };
+      };
+      bio?: string;
+      scoutOrganization?: string;
+    }
   ) => {
     try {
       const { user: firebaseUser } = await createUserWithEmailAndPassword(
@@ -275,9 +323,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Create user document in Firestore
       const userData: Omit<User, "id"> = {
         email: firebaseUser.email!,
-        name: firebaseUser.email!.split("@")[0],
+        name: profileData?.name || firebaseUser.email!.split("@")[0],
         role,
         balance: 0,
+        monkeyCoins: 0, // Phase 1: Initialize MonkeyCoins
         bets: [],
         createdAt: new Date(),
         memberOfPitches: [],
@@ -286,10 +335,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           lastActive: new Date(),
           device: navigator.userAgent,
         },
+        // Phase 2: Add profile data
+        ...(profileData?.location && { location: profileData.location }),
+        ...(profileData?.bio && { bio: profileData.bio }),
+        // Phase 2: Role-specific fields
         ...(role === "pitch_owner" ? { ownedPitches: [] } : {}),
+        ...(role === "club_manager" ? { managedClubs: [] } : {}),
+        ...(role === "scout"
+          ? {
+              scoutOrganization: profileData?.scoutOrganization || "",
+              watchlists: [],
+            }
+          : {}),
+        ...(role === "service_provider" ? { certifications: [] } : {}),
       };
 
       await setDoc(doc(db, "users", firebaseUser.uid), userData);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  // Phase 2: Update user profile
+  const updateUserProfile = async (profileData: Partial<User>) => {
+    if (!currentUser) {
+      throw new Error("User must be authenticated to update profile");
+    }
+
+    try {
+      const userRef = doc(db, "users", currentUser.id);
+      await updateDoc(userRef, profileData);
+
+      // Update local state
+      setCurrentUser((prev) => (prev ? { ...prev, ...profileData } : null));
     } catch (error) {
       throw error;
     }
@@ -309,6 +387,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         name: "Administrator",
         role: "admin",
         balance: 0,
+        monkeyCoins: 0, // Phase 1: Initialize MonkeyCoins
         bets: [],
         createdAt: new Date(),
         memberOfPitches: [],
@@ -383,6 +462,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isReferee,
     isPitchOwner,
     isAdmin,
+    isClubManager,
+    isScout,
+    isServiceProvider,
+    isMinistryOfficial,
+    isFAOfficial,
+    isFacilityManager,
     userPitches,
     ownedPitches,
     isLoading,
@@ -391,6 +476,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     signup,
     adminSignup,
+    updateUserProfile,
     logout,
     joinPitch,
     sessionId,

@@ -10,6 +10,16 @@ import BettingPage from "./pages/BettingPage";
 import PitchesPage from "./pages/PitchesPage";
 import LoginPage from "./pages/LoginPage";
 import RefereeOverviewPage from "./pages/RefereeOverviewPage";
+import ProfilePage from "./pages/ProfilePage"; // Phase 2
+import PlayerProfileViewPage from "./pages/PlayerProfileViewPage"; // Phase 3
+import TalentPoolPage from "./pages/TalentPoolPage"; // Phase 3
+import ClubRegistrationPage from "./pages/ClubRegistrationPage"; // Phase 4
+import ClubManagementPage from "./pages/ClubManagementPage"; // Phase 4
+import ClubProfilePage from "./pages/ClubProfilePage"; // Phase 4
+import ClubVerificationPage from "./pages/ClubVerificationPage"; // Phase 4
+import MyClubsPage from "./pages/MyClubsPage"; // Phase 4
+import RevenueReportingPage from "./pages/RevenueReportingPage"; // Phase 4
+import ClubsPage from "./pages/ClubsPage"; // Phase 4.3
 import AuthProvider, { useAuth } from "./contexts/AuthContext";
 import RequireAuth from "./components/RequireAuth";
 import ScrollToTop from "./components/ScrollToTop";
@@ -86,9 +96,19 @@ const AppContent: React.FC = () => {
         <Route element={<Layout />}>
           <Route path="/" element={<HomePage />} />
           <Route path="pitches" element={<PitchesPage />} />
+          <Route path="player/:userId" element={<PlayerProfileViewPage />} /> {/* Phase 3 */}
+          <Route path="clubs" element={<ClubsPage />} /> {/* Phase 4.3 */}
+          <Route path="club/:clubId" element={<ClubProfilePage />} /> {/* Phase 4 */}
           <Route element={<RequireAuth />}>
             <Route path="teams" element={<TeamsPage />} />
             <Route path="betting" element={<BettingPage />} />
+            <Route path="profile" element={<ProfilePage />} /> {/* Phase 2 */}
+            <Route path="talent-pool" element={<TalentPoolPage />} /> {/* Phase 3 */}
+            <Route path="club/register" element={<ClubRegistrationPage />} /> {/* Phase 4 */}
+            <Route path="my-clubs" element={<MyClubsPage />} /> {/* Phase 4 */}
+            <Route path="club/:clubId/manage" element={<ClubManagementPage />} /> {/* Phase 4 */}
+            <Route path="clubs/verify" element={<ClubVerificationPage />} /> {/* Phase 4 */}
+            <Route path="revenue" element={<RevenueReportingPage />} /> {/* Phase 4 */}
           </Route>
           <Route element={<RequireAuth requireReferee />}>
             <Route path="matches" element={<MatchesPage />} />
