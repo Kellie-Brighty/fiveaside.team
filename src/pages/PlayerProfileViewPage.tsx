@@ -1,9 +1,20 @@
 // Phase 3: Public Player Profile View Page
+// Phase 11: Enhanced with scout features (watchlist, notes, comparison)
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
 import { getPlayerProfile, incrementProfileViews } from "../services/playerProfileService";
+import {
+  addToWatchlist,
+  removeFromWatchlist,
+  isInWatchlist,
+  savePlayerNote,
+  getPlayerNote,
+  getPlayerWatchlistCount,
+  sendScoutMessage,
+  upsertRecruitmentRecord,
+} from "../services/scoutService";
 import type { PlayerProfile, User } from "../types";
 import { getRoleDisplayName, hasPermission } from "../utils/permissions";
 import { useAuth } from "../contexts/AuthContext";
@@ -18,6 +29,23 @@ const PlayerProfileViewPage: React.FC = () => {
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [accessDenied, setAccessDenied] = useState(false);
+  // Phase 11: Scout features
+  const [inWatchlist, setInWatchlist] = useState(false);
+  const [checkingWatchlist, setCheckingWatchlist] = useState(false);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [playerNote, setPlayerNote] = useState("");
+  const [loadingNote, setLoadingNote] = useState(false);
+  const [showMessageModal, setShowMessageModal] = useState(false);
+  const [showRecruitmentModal, setShowRecruitmentModal] = useState(false);
+  const [messageSubject, setMessageSubject] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [messageType, setMessageType] = useState<"general" | "initial_contact" | "follow_up" | "offer">("general");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [recruitmentStage, setRecruitmentStage] = useState<"interested" | "contacted" | "trial_scheduled" | "trial_completed" | "offer_extended" | "offer_accepted" | "offer_declined" | "signed" | "closed">("interested");
+  const [recruitmentNotes, setRecruitmentNotes] = useState("");
+  const [savingRecruitment, setSavingRecruitment] = useState(false);
+  // Phase 11: Player analytics
+  const [watchlistCount, setWatchlistCount] = useState<number | null>(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -104,6 +132,16 @@ const PlayerProfileViewPage: React.FC = () => {
         if (!isOwnProfile) {
           incrementProfileViews(userId);
         }
+
+        // Phase 11: Load watchlist count for player (if profile is public)
+        if (profile.isPublic && userId) {
+          try {
+            const count = await getPlayerWatchlistCount(userId);
+            setWatchlistCount(count);
+          } catch (error) {
+            console.error("Error loading watchlist count:", error);
+          }
+        }
       } catch (error) {
         console.error("Error loading player profile:", error);
         setError("Failed to load player profile");
@@ -114,6 +152,100 @@ const PlayerProfileViewPage: React.FC = () => {
 
     loadProfile();
   }, [userId, currentUser]);
+
+  // Phase 11: Check watchlist status and load notes for scouts
+  useEffect(() => {
+    const loadScoutData = async () => {
+      if (currentUser && userId && currentUser.role === "scout" && currentUser.id !== userId) {
+        try {
+          setCheckingWatchlist(true);
+          const [inList, note] = await Promise.all([
+            isInWatchlist(currentUser.id, userId),
+            getPlayerNote(currentUser.id, userId),
+          ]);
+          setInWatchlist(inList);
+          if (note) {
+            setPlayerNote(note.note);
+          }
+        } catch (error) {
+          console.error("Error loading scout data:", error);
+        } finally {
+          setCheckingWatchlist(false);
+        }
+      }
+    };
+
+    if (currentUser && userId && playerProfile) {
+      loadScoutData();
+    }
+  }, [currentUser, userId, playerProfile]);
+
+  // Phase 11: Save player note
+  const handleSaveNote = async () => {
+    if (!currentUser || !userId || currentUser.role !== "scout") return;
+
+    try {
+      setLoadingNote(true);
+      await savePlayerNote(currentUser.id, userId, playerNote.trim());
+      setShowNotesModal(false);
+      if (window.toast) {
+        window.toast.success("Note saved successfully");
+      }
+    } catch (error) {
+      console.error("Error saving note:", error);
+      if (window.toast) {
+        window.toast.error("Failed to save note");
+      }
+    } finally {
+      setLoadingNote(false);
+    }
+  };
+
+  // Phase 11: Toggle watchlist
+  const handleToggleWatchlist = async () => {
+    if (!currentUser || !userId || currentUser.role !== "scout") return;
+
+    try {
+      if (inWatchlist) {
+        await removeFromWatchlist(currentUser.id, userId);
+        setInWatchlist(false);
+        if (window.toast) {
+          window.toast.success("Removed from watchlist");
+        }
+      } else {
+        await addToWatchlist(currentUser.id, userId);
+        setInWatchlist(true);
+        if (window.toast) {
+          window.toast.success("Added to watchlist");
+        }
+      }
+    } catch (error) {
+      console.error("Error toggling watchlist:", error);
+      if (window.toast) {
+        window.toast.error("Failed to update watchlist");
+      }
+    }
+  };
+
+  // Phase 11: Quick comparison - navigate to comparison page
+  const handleComparePlayers = () => {
+    if (!currentUser || currentUser.role !== "scout" || !userId) return;
+    
+    // Get watchlist IDs and add current player
+    const watchlistIds = currentUser.watchlists || [];
+    const allPlayerIds = [...watchlistIds, userId].filter((id, index, arr) => arr.indexOf(id) === index);
+    
+    if (allPlayerIds.length < 2) {
+      if (window.toast) {
+        window.toast.warning("Add at least one more player to your watchlist to compare");
+      }
+      return;
+    }
+
+    // Limit to 5 players for comparison
+    const playersToCompare = allPlayerIds.slice(0, 5);
+    navigate(`/player-comparison?players=${playersToCompare.join(",")}`);
+  };
 
   if (isAuthLoading || loading) {
     return <LoadingScreen />;
@@ -207,7 +339,7 @@ const PlayerProfileViewPage: React.FC = () => {
             alt={user.name}
             className="w-24 h-24 rounded-full object-cover border-2 border-gray-700"
           />
-          <div>
+          <div className="flex-1">
             <h1 className="text-3xl font-bold text-white mb-2">{user.name}</h1>
             <p className="text-gray-400">{getRoleDisplayName(user.role)}</p>
             {playerProfile.position && (
@@ -222,6 +354,69 @@ const PlayerProfileViewPage: React.FC = () => {
               </p>
             )}
           </div>
+          {/* Phase 11: Scout Actions */}
+          {currentUser && currentUser.role === "scout" && currentUser.id !== userId && (
+            <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
+              <button
+                onClick={handleToggleWatchlist}
+                disabled={checkingWatchlist}
+                className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
+                  inWatchlist
+                    ? "bg-red-600 hover:bg-red-700 text-white"
+                    : "bg-yellow-600 hover:bg-yellow-700 text-white"
+                } disabled:opacity-50`}
+                title={inWatchlist ? "Remove from watchlist" : "Add to watchlist"}
+              >
+                {checkingWatchlist ? (
+                  <span className="flex items-center gap-2">
+                    <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    Checking...
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 sm:gap-2">
+                    {inWatchlist ? "★ Watchlist" : "☆ Add"}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handleComparePlayers}
+                className="px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs sm:text-sm font-medium"
+                title="Compare with other players in your watchlist"
+              >
+                Compare
+              </button>
+              <button
+                onClick={() => setShowNotesModal(true)}
+                className="px-3 sm:px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs sm:text-sm font-medium"
+                title="Add notes about this player"
+              >
+                {playerNote ? "📝 Edit Note" : "📝 Note"}
+              </button>
+              <button
+                onClick={() => {
+                  // Open message modal (we'll need to add this state)
+                  setShowMessageModal(true);
+                }}
+                className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs sm:text-sm font-medium"
+                title="Send message to this player"
+              >
+                💬 Message
+              </button>
+              <button
+                onClick={() => {
+                  // Open recruitment modal
+                  setShowRecruitmentModal(true);
+                }}
+                className="px-3 sm:px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs sm:text-sm font-medium"
+                title="Add to recruitment pipeline"
+              >
+                🎯 Recruit
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -519,8 +714,270 @@ const PlayerProfileViewPage: React.FC = () => {
               </div>
             </div>
           </div>
+
+          {/* Phase 11: Player Analytics - Show watchlist count and profile views */}
+          {currentUser && currentUser.id === userId && (
+            <div className="bg-dark-lighter rounded-xl shadow-xl p-6">
+              <h2 className="text-xl font-bold text-white mb-4">Profile Analytics</h2>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-dark p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Profile Views</p>
+                  <p className="text-2xl font-bold text-white">
+                    {playerProfile.profileViews || 0}
+                  </p>
+                </div>
+                <div className="bg-dark p-4 rounded-lg">
+                  <p className="text-sm text-gray-400">Scout Watchlists</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {watchlistCount !== null ? watchlistCount : "..."}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {watchlistCount === 1
+                      ? "scout is tracking you"
+                      : watchlistCount !== null && watchlistCount > 1
+                      ? "scouts are tracking you"
+                      : watchlistCount === 0
+                      ? "No scouts yet"
+                      : ""}
+                  </p>
+                </div>
+              </div>
+              {watchlistCount !== null && watchlistCount > 0 && (
+                <div className="mt-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                  <p className="text-sm text-primary font-medium">
+                    🎯 Great! {watchlistCount} {watchlistCount === 1 ? "scout has" : "scouts have"} added you to their watchlist!
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Keep your profile updated and stats current to stay on their radar.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Phase 11: Notes Modal */}
+      {showNotesModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-lighter rounded-xl shadow-xl p-4 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Player Notes</h2>
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Your Notes
+              </label>
+              <textarea
+                value={playerNote}
+                onChange={(e) => setPlayerNote(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary min-h-[200px]"
+                placeholder="Add your observations, strengths, areas for improvement, or any notes about this player..."
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={handleSaveNote}
+                disabled={loadingNote}
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-50 text-sm sm:text-base"
+              >
+                {loadingNote ? "Saving..." : "Save Note"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowNotesModal(false);
+                }}
+                className="px-4 py-2 bg-dark border border-gray-700 hover:bg-dark-light text-white rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 11: Message Modal */}
+      {showMessageModal && currentUser && userId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-lighter rounded-xl shadow-xl p-4 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Send Message to {user.name}</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Message Type
+                </label>
+                <select
+                  value={messageType}
+                  onChange={(e) => setMessageType(e.target.value as typeof messageType)}
+                  className="w-full px-4 py-2 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary text-sm sm:text-base"
+                >
+                  <option value="general">General</option>
+                  <option value="initial_contact">Initial Contact</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="offer">Offer</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Subject
+                </label>
+                <input
+                  type="text"
+                  value={messageSubject}
+                  onChange={(e) => setMessageSubject(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary text-sm sm:text-base"
+                  placeholder="Message subject"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Message
+                </label>
+                <textarea
+                  value={messageText}
+                  onChange={(e) => setMessageText(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary min-h-[150px] text-sm sm:text-base"
+                  placeholder="Enter your message..."
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 mt-6">
+              <button
+                onClick={async () => {
+                  if (!messageSubject || !messageText) {
+                    if (window.toast) {
+                      window.toast.error("Please fill in all fields");
+                    }
+                    return;
+                  }
+                  try {
+                    setSendingMessage(true);
+                    await sendScoutMessage(
+                      currentUser.id,
+                      userId,
+                      messageSubject,
+                      messageText,
+                      messageType
+                    );
+                    setShowMessageModal(false);
+                    setMessageSubject("");
+                    setMessageText("");
+                    setMessageType("general");
+                    if (window.toast) {
+                      window.toast.success("Message sent successfully");
+                    }
+                  } catch (error) {
+                    console.error("Error sending message:", error);
+                    if (window.toast) {
+                      window.toast.error("Failed to send message");
+                    }
+                  } finally {
+                    setSendingMessage(false);
+                  }
+                }}
+                disabled={sendingMessage}
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-50 text-sm sm:text-base"
+              >
+                {sendingMessage ? "Sending..." : "Send Message"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowMessageModal(false);
+                  setMessageSubject("");
+                  setMessageText("");
+                  setMessageType("general");
+                }}
+                className="px-4 py-2 bg-dark border border-gray-700 hover:bg-dark-light text-white rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 11: Recruitment Modal */}
+      {showRecruitmentModal && currentUser && userId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-dark-lighter rounded-xl shadow-xl p-4 sm:p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <h2 className="text-lg sm:text-xl font-bold text-white mb-4">Add {user.name} to Recruitment Pipeline</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Stage
+                </label>
+                <select
+                  value={recruitmentStage}
+                  onChange={(e) => setRecruitmentStage(e.target.value as typeof recruitmentStage)}
+                  className="w-full px-4 py-2 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary text-sm sm:text-base"
+                >
+                  <option value="interested">Interested</option>
+                  <option value="contacted">Contacted</option>
+                  <option value="trial_scheduled">Trial Scheduled</option>
+                  <option value="trial_completed">Trial Completed</option>
+                  <option value="offer_extended">Offer Extended</option>
+                  <option value="offer_accepted">Offer Accepted</option>
+                  <option value="offer_declined">Offer Declined</option>
+                  <option value="signed">Signed</option>
+                  <option value="closed">Closed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Notes
+                </label>
+                <textarea
+                  value={recruitmentNotes}
+                  onChange={(e) => setRecruitmentNotes(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary min-h-[150px] text-sm sm:text-base"
+                  placeholder="Add notes about this recruitment..."
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 mt-6">
+              <button
+                onClick={async () => {
+                  if (!currentUser || !userId) return;
+                  try {
+                    setSavingRecruitment(true);
+                    await upsertRecruitmentRecord(
+                      currentUser.id,
+                      userId,
+                      recruitmentStage,
+                      recruitmentNotes
+                    );
+                    setShowRecruitmentModal(false);
+                    setRecruitmentStage("interested");
+                    setRecruitmentNotes("");
+                    if (window.toast) {
+                      window.toast.success("Player added to recruitment pipeline");
+                    }
+                  } catch (error) {
+                    console.error("Error saving recruitment:", error);
+                    if (window.toast) {
+                      window.toast.error("Failed to save recruitment record");
+                    }
+                  } finally {
+                    setSavingRecruitment(false);
+                  }
+                }}
+                disabled={savingRecruitment}
+                className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg disabled:opacity-50 text-sm sm:text-base"
+              >
+                {savingRecruitment ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setShowRecruitmentModal(false);
+                  setRecruitmentStage("interested");
+                  setRecruitmentNotes("");
+                }}
+                className="px-4 py-2 bg-dark border border-gray-700 hover:bg-dark-light text-white rounded-lg text-sm sm:text-base"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

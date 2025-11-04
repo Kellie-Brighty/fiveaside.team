@@ -8,18 +8,15 @@ import shortLogo from "../assets/short-logo.png";
 
 type AuthMode = "login" | "signup";
 
-// Phase 2: Available roles for signup (excluding admin which has separate flow)
+// Phase 2: Available roles for signup (excluding admin, spectator, ministry_official, facility_manager which require admin verification)
 const SIGNUP_ROLES: UserRole[] = [
   "player",
   "referee",
   "pitch_owner",
-  "spectator",
   "club_manager",
   "scout",
   "service_provider",
-  "ministry_official",
   "fa_official",
-  "facility_manager",
 ];
 
 // Role icons mapping - SVG icons

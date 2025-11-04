@@ -1,0 +1,32 @@
+{
+  "generatedAt": "2025-11-04T15:54:28.363Z",
+  "totalPlayers": 1,
+  "summary": {
+    "totalGoals": 0,
+    "totalAssists": 0,
+    "totalMatches": 0,
+    "positions": {
+      "Winger": 1
+    }
+  },
+  "players": [
+    {
+      "name": "Bright Kelly",
+      "position": "Winger",
+      "stats": {
+        "matchesDrawn": 0,
+        "yellowCards": 0,
+        "matchesWon": 0,
+        "assists": 0,
+        "matchesPlayed": 0,
+        "goals": 0,
+        "redCards": 0,
+        "matchesLost": 0
+      },
+      "location": {
+        "city": "",
+        "state": ""
+      }
+    }
+  ]
+}

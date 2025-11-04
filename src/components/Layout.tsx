@@ -14,6 +14,7 @@ interface NavItem {
   roles: string[];
   primary: boolean; // Phase 3: Primary items show in bottom nav, secondary in More menu
   children?: NavItem[]; // Phase 5: Nested menu items for desktop
+  comingSoon?: boolean; // Phase 11: Coming Soon indicator
 }
 
 // Icons for mobile navigation
@@ -68,22 +69,6 @@ const MatchesIcon = () => (
   </svg>
 );
 
-const BettingIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    className="h-6 w-6"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    />
-  </svg>
-);
 
 const PitchesIcon = () => (
   <svg
@@ -286,7 +271,7 @@ const Layout: React.FC = () => {
       label: "Admin Dashboard",
       icon: AdminIcon,
       roles: ["admin"],
-      primary: false, // Phase 3: Secondary item - goes in More menu
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: "/pitches",
@@ -317,13 +302,6 @@ const Layout: React.FC = () => {
       primary: false, // Phase 3: Secondary item
     },
     {
-      path: "/betting",
-      label: "Betting",
-      icon: BettingIcon,
-      roles: ["all"],
-      primary: false, // Phase 4.3: Secondary item - moved to More menu for players
-    },
-    {
       path: "/profile",
       label: "Profile",
       icon: () => (
@@ -343,7 +321,51 @@ const Layout: React.FC = () => {
         </svg>
       ),
       roles: ["authenticated"],
-      primary: false, // Phase 5: Secondary item - goes in More menu
+      primary: false, // Will be set dynamically based on role
+    },
+    {
+      path: "/player-messages",
+      label: "Scout Messages",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+          />
+        </svg>
+      ),
+      roles: ["player"],
+      primary: false, // Will be set dynamically based on role
+    },
+    {
+      path: "/player-recruitment",
+      label: "Recruitment Status",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+          />
+        </svg>
+      ),
+      roles: ["player"],
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: "/talent-pool",
@@ -372,7 +394,75 @@ const Layout: React.FC = () => {
         "admin",
         "player",
       ],
-      primary: false, // Phase 3: Secondary item - goes in More menu
+      primary: false, // Will be set dynamically based on role
+    },
+    {
+      path: "/scout-dashboard",
+      label: "Scout Dashboard",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+          />
+        </svg>
+      ),
+      roles: ["scout"],
+      primary: false, // Will be set dynamically based on role
+    },
+    {
+      path: "/coming-soon/ticketing",
+      label: "Electronic Ticketing",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
+          />
+        </svg>
+      ),
+      roles: ["all"],
+      primary: false, // Coming Soon - goes in More menu
+      comingSoon: true,
+    },
+    {
+      path: "/coming-soon/betting",
+      label: "Betting System",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      ),
+      roles: ["all"],
+      primary: false, // Coming Soon - goes in More menu
+      comingSoon: true,
     },
     {
       path: "/clubs",
@@ -394,7 +484,7 @@ const Layout: React.FC = () => {
         </svg>
       ),
       roles: ["all"], // Phase 4.3: All authenticated users can browse clubs
-      primary: true, // Phase 4.3: Primary item - core feature for players
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: "/leagues",
@@ -416,7 +506,7 @@ const Layout: React.FC = () => {
         </svg>
       ),
       roles: ["all"], // Phase 5: All authenticated users can browse leagues
-      primary: true, // Phase 5: Primary item - core feature for club managers
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: "/products",
@@ -438,14 +528,14 @@ const Layout: React.FC = () => {
         </svg>
       ),
       roles: ["all"], // Phase 8: All users can browse products
-      primary: true, // Phase 8: Primary item - core feature for mobile
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: hasClubs ? "/my-clubs" : "/club/register",
       label: hasClubs ? "My Clubs" : "Register Club",
       icon: ClubIcon,
       roles: ["club_manager", "admin"], // Phase 4: Club registration/management for club managers
-      primary: false, // Phase 4: Secondary item - goes in More menu
+      primary: false, // Will be set dynamically based on role
     },
     {
       path: "/clubs/verify",
@@ -579,6 +669,138 @@ const Layout: React.FC = () => {
         roles: ["club_manager", "admin", "service_provider"], // Phase 8: Sellers can manage orders
         primary: false, // Phase 8: Secondary item - goes in More menu
       },
+    {
+      path: "/service-providers/manage",
+      label: "Provider Dashboard",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+          />
+        </svg>
+      ),
+      roles: ["service_provider"], // Phase 9: Service providers dashboard
+      primary: false, // Will be set dynamically based on role
+    },
+    {
+      path: "/service-providers",
+      label: "Service Providers",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+          />
+        </svg>
+      ),
+      roles: ["all"], // Phase 9: All users can browse service providers
+      primary: false, // Phase 9: Secondary item - goes in More menu
+    },
+    {
+      path: "/service-providers/register",
+      label: "Register as Provider",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 4v16m8-8H4"
+          />
+        </svg>
+      ),
+      roles: ["service_provider"], // Phase 9: Service providers can register
+      primary: false, // Phase 9: Secondary item - goes in More menu
+    },
+    {
+      path: "/service-bookings",
+      label: "My Bookings",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+          />
+        </svg>
+      ),
+      roles: ["all"], // Phase 9: All authenticated users can view their bookings
+      primary: false, // Phase 9: Secondary item - goes in More menu
+    },
+    {
+      path: "/service-providers/bookings",
+      label: "Provider Bookings",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+          />
+        </svg>
+      ),
+      roles: ["service_provider"], // Phase 9: Service providers can manage bookings
+      primary: false, // Phase 9: Secondary item - goes in More menu
+    },
+    {
+      path: "/service-providers/earnings",
+      label: "My Earnings",
+      icon: () => (
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      ),
+      roles: ["service_provider"], // Phase 9: Service providers can view earnings
+      primary: false, // Phase 9: Secondary item - goes in More menu
+    },
     ];
 
   const navItems = getNavItems();
@@ -610,9 +832,69 @@ const Layout: React.FC = () => {
 
   const visibleNavItems = getVisibleNavItems();
 
+  // Phase 12: Reorganize items by role priority - limit to top 5 items per role (including Home and More)
+  const getRolePriorityItems = () => {
+    if (!isAuthenticated) {
+      return visibleNavItems;
+    }
+
+    const role = isAdmin
+      ? "admin"
+      : isPitchOwner
+      ? "pitch_owner"
+      : isReferee
+      ? "referee"
+      : currentUser?.role || "player";
+
+    // Define top priority items for each role (max 3-4 items + Home + More = 5-6 total)
+    const rolePrimaryPaths: { [key: string]: string[] } = {
+      player: ["/profile", "/player-messages", "/player-recruitment"], // 3 items
+      scout: ["/scout-dashboard", "/talent-pool"], // 2 items
+      club_manager: [hasClubs ? "/my-clubs" : "/club/register", "/clubs"], // 2 items
+      service_provider: ["/service-providers/manage", "/service-providers/bookings"], // 2 items
+      admin: ["/admin"], // 1 item
+      referee: ["/referee-overview", "/matches"], // 2 items
+    };
+
+    // Reorganize items based on role - set primary flags dynamically
+    const updatedItems = visibleNavItems.map((item) => {
+      // Keep Home as primary for all
+      if (item.path === "/") {
+        return { ...item, primary: true };
+      }
+
+      // Check if this item is in the role's primary list
+      const primaryPaths = rolePrimaryPaths[role] || [];
+      const isPrimary = primaryPaths.some((path) => {
+        if (item.path?.includes(path) || item.path === path) {
+          return true;
+        }
+        // Handle dynamic paths like /my-clubs
+        if (path.includes("/my-clubs") && item.path?.includes("/my-clubs")) {
+          return true;
+        }
+        if (path.includes("/club/register") && item.path?.includes("/club/register")) {
+          return true;
+        }
+        return false;
+      });
+
+      if (isPrimary) {
+        return { ...item, primary: true };
+      }
+
+      // All other items are secondary
+      return { ...item, primary: false };
+    });
+
+    return updatedItems;
+  };
+
+  const prioritizedItems = getRolePriorityItems();
+
   // Phase 3: Separate primary and secondary items for mobile navigation
-  const primaryItems = visibleNavItems.filter((item) => item.primary);
-  const secondaryItems = visibleNavItems.filter((item) => !item.primary);
+  const primaryItems = prioritizedItems.filter((item) => item.primary);
+  const secondaryItems = prioritizedItems.filter((item) => !item.primary);
 
   // Phase 5: Desktop nested menu state
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
@@ -646,9 +928,10 @@ const Layout: React.FC = () => {
     const adminGroup: NavItem[] = [];
     const featuresGroup: NavItem[] = [];
     const ecommerceGroup: NavItem[] = []; // Phase 8: E-commerce group
+    const serviceProvidersGroup: NavItem[] = []; // Phase 9: Service Providers group
     const otherItems: NavItem[] = [];
 
-    visibleNavItems.forEach((item) => {
+    prioritizedItems.forEach((item) => {
       // Clubs group
       if (
         item.path?.includes("/clubs") ||
@@ -673,6 +956,17 @@ const Layout: React.FC = () => {
       ) {
         ecommerceGroup.push(item);
       }
+      // Service Providers group (Phase 9)
+      else if (
+        (item.path?.includes("/service-providers") && !item.primary) ||
+        item.path?.includes("/service-bookings") ||
+        item.label.toLowerCase().includes("service provider") ||
+        (item.label.toLowerCase().includes("provider") && !item.primary) ||
+        item.label.toLowerCase().includes("booking")
+      ) {
+        // Don't add primary service provider items to nested groups
+        serviceProvidersGroup.push(item);
+      }
       // Admin group
       else if (
         item.path?.includes("/admin") ||
@@ -688,8 +982,10 @@ const Layout: React.FC = () => {
         item.path?.includes("/teams") ||
         item.path?.includes("/matches") ||
         item.path?.includes("/referee-overview") ||
-        item.path?.includes("/betting") ||
-        item.path?.includes("/talent-pool")
+        (item.path?.includes("/talent-pool") && !item.primary) ||
+        item.path?.includes("/coming-soon/ticketing") ||
+        item.path?.includes("/coming-soon/betting") ||
+        (item.path?.includes("/scout-dashboard") && !item.primary)
       ) {
         featuresGroup.push(item);
       }
@@ -701,121 +997,96 @@ const Layout: React.FC = () => {
 
     const nested: Array<NavItem & { children: NavItem[] }> = [];
 
-    // Add single items first (Home, Profile)
-    otherItems
-      .filter((item) => !item.children || item.children.length === 0)
-      .forEach((item) => nested.push({ ...item, children: [] }));
+    // Desktop: Only show top 3 items (Home + 2 most important role-specific items)
+    // All other items go into nested menus
+    const topLevelItems: NavItem[] = [];
+    const roleSpecificPrimary = prioritizedItems.filter(
+      (item) => item.primary && item.path !== "/" && (!('children' in item) || !item.children || (Array.isArray(item.children) && item.children.length === 0))
+    );
+    
+    // Always add Home first
+    const homeItem = prioritizedItems.find((item) => item.path === "/");
+    if (homeItem && homeItem.primary) {
+      topLevelItems.push({ ...homeItem, children: [] });
+    }
+    
+    // Add only 2 most important role-specific primary items for desktop navbar
+    roleSpecificPrimary.slice(0, 2).forEach((item) => {
+      const inGroup = clubsGroup.includes(item) ||
+        leaguesGroup.includes(item) ||
+        ecommerceGroup.includes(item) ||
+        serviceProvidersGroup.includes(item) ||
+        featuresGroup.includes(item) ||
+        adminGroup.includes(item);
+      if (!inGroup) {
+        topLevelItems.push({ ...item, children: [] });
+      }
+    });
+    
+    // Add remaining primary items to appropriate groups instead of top-level
+    // These will be added to their respective groups if they match (handled below)
+    // Otherwise, they'll be in "More" nested menu
+    
+    topLevelItems.forEach((item) => nested.push({ ...item, children: [] }));
 
-    // Add grouped items with children
+    // Create "More" menu with all grouped items and remaining items
+    const moreMenuChildren: NavItem[] = [];
+    
+    // Add all groups to More menu
     if (clubsGroup.length > 0) {
-      nested.push({
-        path: undefined,
-        label: "Clubs",
-        icon: () => (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-            />
-          </svg>
-        ),
-        roles: ["all"],
-        primary: false,
-        children: clubsGroup,
-      });
+      moreMenuChildren.push(...clubsGroup);
     }
-
     if (leaguesGroup.length > 0) {
-      nested.push({
-        path: undefined,
-        label: "Leagues",
-        icon: () => (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
-            />
-          </svg>
-        ),
-        roles: ["all"],
-        primary: false,
-        children: leaguesGroup,
-      });
+      moreMenuChildren.push(...leaguesGroup);
     }
-
-    // Phase 8: E-commerce group
     if (ecommerceGroup.length > 0) {
-      nested.push({
-        path: undefined,
-        label: "i-Sale",
-        icon: () => (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
-            />
-          </svg>
-        ),
-        roles: ["all"],
-        primary: false,
-        children: ecommerceGroup,
-      });
+      moreMenuChildren.push(...ecommerceGroup);
     }
-
+    if (serviceProvidersGroup.length > 0) {
+      moreMenuChildren.push(...serviceProvidersGroup);
+    }
     if (featuresGroup.length > 0) {
-      nested.push({
-        path: undefined,
-        label: "Features",
-        icon: () => (
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
-            />
-          </svg>
-        ),
-        roles: ["all"],
-        primary: false,
-        children: featuresGroup,
-      });
+      moreMenuChildren.push(...featuresGroup);
     }
-
     if (adminGroup.length > 0) {
+      moreMenuChildren.push(...adminGroup);
+    }
+    
+    // Add remaining primary items that aren't in top 3
+    roleSpecificPrimary.slice(2).forEach((item) => {
+      const inGroup = clubsGroup.includes(item) ||
+        leaguesGroup.includes(item) ||
+        ecommerceGroup.includes(item) ||
+        serviceProvidersGroup.includes(item) ||
+        featuresGroup.includes(item) ||
+        adminGroup.includes(item);
+      const isTopLevel = topLevelItems.some((top) => top.path === item.path);
+      if (!inGroup && !isTopLevel) {
+        moreMenuChildren.push(item);
+      }
+    });
+    
+    // Add all secondary items
+    prioritizedItems
+      .filter((item) => !item.primary && (!('children' in item) || !item.children || (Array.isArray(item.children) && item.children.length === 0)))
+      .forEach((item) => {
+        const inGroup = clubsGroup.includes(item) ||
+          leaguesGroup.includes(item) ||
+          ecommerceGroup.includes(item) ||
+          serviceProvidersGroup.includes(item) ||
+          featuresGroup.includes(item) ||
+          adminGroup.includes(item);
+        const isTopLevel = topLevelItems.some((top) => top.path === item.path);
+        if (!inGroup && !isTopLevel) {
+          moreMenuChildren.push(item);
+        }
+      });
+    
+    // Add "More" menu if there are items to nest
+    if (moreMenuChildren.length > 0) {
       nested.push({
         path: undefined,
-        label: "Admin",
+        label: "More",
         icon: () => (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -828,19 +1099,13 @@ const Layout: React.FC = () => {
               strokeLinecap="round"
               strokeLinejoin="round"
               strokeWidth={2}
-              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-            />
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+              d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
             />
           </svg>
         ),
         roles: ["all"],
         primary: false,
-        children: adminGroup,
+        children: moreMenuChildren,
       });
     }
 
@@ -934,14 +1199,14 @@ const Layout: React.FC = () => {
                             ref={(el) => {
                               dropdownRefs.current[dropdownId] = el;
                             }}
-                            className="absolute top-full left-0 mt-1 w-56 bg-dark-lighter rounded-lg shadow-xl border border-gray-700 z-50 py-2"
+                            className="absolute top-full left-0 mt-1 min-w-56 bg-dark-lighter rounded-lg shadow-xl border border-gray-700 z-50 py-2"
                           >
                             {item.children?.map((child) => (
-                              <Link
+                  <Link
                                 key={child.path}
                                 to={child.path || "#"}
                                 onClick={() => setOpenDropdown(null)}
-                                className={`block px-4 py-2 text-sm transition-colors ${
+                                className={`block px-4 py-2 text-sm transition-colors whitespace-nowrap ${
                                   isActive(child.path || "")
                                     ? "bg-primary/20 text-primary"
                                     : "text-gray-300 hover:bg-dark hover:text-white"
@@ -951,7 +1216,12 @@ const Layout: React.FC = () => {
                                   <div className="flex-shrink-0">
                                     <child.icon />
                                   </div>
-                                  <span>{child.label}</span>
+                                  <span className="flex-1">{child.label}</span>
+                                  {child.comingSoon && (
+                                    <span className="ml-auto flex-shrink-0 text-xs bg-yellow-600 text-white px-2 py-0.5 rounded">
+                                      Coming Soon
+                                    </span>
+                                  )}
                                 </div>
                               </Link>
                             ))}
@@ -961,16 +1231,21 @@ const Layout: React.FC = () => {
                     ) : (
                       <Link
                         to={item.path || "#"}
-                        className={`px-3 py-2 rounded-md transition-colors flex items-center justify-center min-h-[36px] ${
+                        className={`px-3 py-2 rounded-md transition-colors flex items-center justify-center gap-2 min-h-[36px] ${
                           isActive(item.path || "")
-                            ? "bg-white/20 text-white font-medium"
-                            : "text-white hover:bg-white/10"
-                        }`}
-                      >
+                        ? "bg-white/20 text-white font-medium"
+                        : "text-white hover:bg-white/10"
+                    }`}
+                  >
                         <span>{item.label}</span>
-                      </Link>
+                        {item.comingSoon && (
+                          <span className="text-xs bg-yellow-600 text-white px-2 py-0.5 rounded">
+                            Coming Soon
+                          </span>
+                        )}
+                  </Link>
                     )}
-                  </li>
+                </li>
                 );
               })}
             </ul>
@@ -1214,9 +1489,9 @@ const Layout: React.FC = () => {
                 {secondaryItems.map((item) => (
                   <button
                     key={item.path}
-                    onClick={() => handleMoreMenuItemClick(item.path)}
+                    onClick={() => handleMoreMenuItemClick(item.path || "")}
                     className={`w-full flex items-center gap-4 px-4 py-4 rounded-lg mb-2 transition-colors ${
-                      isActive(item.path)
+                      isActive(item.path || "")
                         ? "bg-primary/20 text-primary"
                         : "bg-dark hover:bg-dark-light text-gray-300"
                     }`}
@@ -1224,10 +1499,15 @@ const Layout: React.FC = () => {
                     <div className="flex-shrink-0">
                       <item.icon />
                     </div>
-                    <span className="text-left font-medium">{item.label}</span>
-                    {isActive(item.path) && (
+                    <span className="text-left font-medium flex-1">{item.label}</span>
+                    {item.comingSoon && (
+                      <span className="text-xs bg-yellow-600 text-white px-2 py-0.5 rounded mr-2">
+                        Coming Soon
+                      </span>
+                    )}
+                    {isActive(item.path || "") && (
                       <div className="ml-auto">
-n                        <svg
+                  <svg
                           xmlns="http://www.w3.org/2000/svg"
                           className="h-5 w-5 text-primary"
                           fill="none"

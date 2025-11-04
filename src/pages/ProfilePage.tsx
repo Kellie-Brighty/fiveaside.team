@@ -21,6 +21,7 @@ import {
   cancelTransferRequest,
 } from "../services/transferService"; // Phase 4.3
 import { getClub } from "../services/clubService"; // Phase 4.3
+import { getPlayerWatchlistCount } from "../services/scoutService"; // Phase 11
 import type { PlayerProfile, Achievement, TransferRequest, Club } from "../types";
 
 const ProfilePage: React.FC = () => {
@@ -62,6 +63,8 @@ const ProfilePage: React.FC = () => {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [videoUploadProgress, setVideoUploadProgress] = useState(0);
+  // Phase 11: Scout analytics
+  const [watchlistCount, setWatchlistCount] = useState<number | null>(null);
   
   // Achievement form state
   const [showAchievementForm, setShowAchievementForm] = useState(false);
@@ -104,6 +107,16 @@ const ProfilePage: React.FC = () => {
             setHighlightVideos(profile.highlightVideos || []);
             setImages(profile.images || []);
             setAchievements(profile.achievements || []);
+
+            // Phase 11: Load watchlist count if profile is public
+            if (profile.isPublic) {
+              try {
+                const count = await getPlayerWatchlistCount(currentUser.id);
+                setWatchlistCount(count);
+              } catch (error) {
+                console.error("Error loading watchlist count:", error);
+              }
+            }
           }
         } catch (error) {
           console.error("Error loading player profile:", error);
@@ -1200,6 +1213,17 @@ const ProfilePage: React.FC = () => {
                   When enabled, scouts and club managers can discover and view
                   your profile through the talent search.
                 </p>
+                {/* Phase 11: Show watchlist count if profile is public */}
+                {isPublic && watchlistCount !== null && (
+                  <div className="mb-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+                    <p className="text-sm text-primary font-medium">
+                      🎯 {watchlistCount} {watchlistCount === 1 ? "scout has" : "scouts have"} added you to their watchlist!
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Keep your profile updated to stay on their radar.
+                    </p>
+                  </div>
+                )}
 
                 {/* Public Profile Link */}
                 <div className="bg-dark p-4 rounded-lg border border-gray-700">

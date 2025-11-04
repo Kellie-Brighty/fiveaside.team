@@ -29,6 +29,19 @@ import ProductManagementPage from "./pages/ProductManagementPage"; // Phase 8
 import CheckoutPage from "./pages/CheckoutPage"; // Phase 8
 import OrdersPage from "./pages/OrdersPage"; // Phase 8
 import SellerOrdersPage from "./pages/SellerOrdersPage"; // Phase 8
+import ServiceProvidersPage from "./pages/ServiceProvidersPage"; // Phase 9
+import ServiceProviderProfilePage from "./pages/ServiceProviderProfilePage"; // Phase 9
+import ServiceProviderRegistrationPage from "./pages/ServiceProviderRegistrationPage"; // Phase 9
+import ServiceProviderDashboardPage from "./pages/ServiceProviderDashboardPage"; // Phase 9
+import ServiceBookingPage from "./pages/ServiceBookingPage"; // Phase 9
+import ServiceBookingsPage from "./pages/ServiceBookingsPage"; // Phase 9
+import ProviderBookingsPage from "./pages/ProviderBookingsPage"; // Phase 9
+import ProviderEarningsPage from "./pages/ProviderEarningsPage"; // Phase 9
+import ScoutDashboardPage from "./pages/ScoutDashboardPage"; // Phase 11
+import PlayerComparisonPage from "./pages/PlayerComparisonPage"; // Phase 11
+import ComingSoonPage from "./pages/ComingSoonPage"; // Phase 11
+import PlayerMessagesPage from "./pages/PlayerMessagesPage"; // Phase 11
+import PlayerRecruitmentPage from "./pages/PlayerRecruitmentPage"; // Phase 11
 import AuthProvider, { useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContext"; // Phase 8
 import RequireAuth from "./components/RequireAuth";
@@ -113,6 +126,9 @@ const AppContent: React.FC = () => {
           <Route path="leagues/:leagueId" element={<LeagueViewPage />} /> {/* Phase 5 */}
           <Route path="products" element={<ProductsPage />} /> {/* Phase 8 */}
           <Route path="products/:productId" element={<ProductDetailPage />} /> {/* Phase 8 */}
+          <Route path="service-providers" element={<ServiceProvidersPage />} /> {/* Phase 9 */}
+          <Route path="service-providers/:providerId" element={<ServiceProviderProfilePage />} /> {/* Phase 9 */}
+          <Route path="service-providers/:providerId/book" element={<ServiceBookingPage />} /> {/* Phase 9 */}
           <Route element={<RequireAuth />}>
             <Route path="teams" element={<TeamsPage />} />
             <Route path="betting" element={<BettingPage />} />
@@ -131,6 +147,18 @@ const AppContent: React.FC = () => {
             <Route path="orders/:orderId" element={<OrdersPage />} /> {/* Phase 8 */}
             <Route path="orders/seller" element={<SellerOrdersPage />} /> {/* Phase 8 */}
             <Route path="orders/seller/:orderId" element={<SellerOrdersPage />} /> {/* Phase 8 */}
+            <Route path="service-providers/register" element={<ServiceProviderRegistrationPage />} /> {/* Phase 9 */}
+            <Route path="service-providers/manage" element={<ServiceProviderDashboardPage />} /> {/* Phase 9 */}
+            <Route path="service-bookings" element={<ServiceBookingsPage />} /> {/* Phase 9 */}
+            <Route path="service-bookings/:bookingId" element={<ServiceBookingsPage />} /> {/* Phase 9 */}
+            <Route path="service-providers/bookings" element={<ProviderBookingsPage />} /> {/* Phase 9 */}
+            <Route path="service-providers/bookings/:bookingId" element={<ProviderBookingsPage />} /> {/* Phase 9 */}
+            <Route path="service-providers/earnings" element={<ProviderEarningsPage />} /> {/* Phase 9 */}
+            <Route path="scout-dashboard" element={<ScoutDashboardPage />} /> {/* Phase 11 */}
+            <Route path="player-comparison" element={<PlayerComparisonPage />} /> {/* Phase 11 */}
+            <Route path="coming-soon/:feature" element={<ComingSoonPage />} /> {/* Phase 11 */}
+            <Route path="player-messages" element={<PlayerMessagesPage />} /> {/* Phase 11 */}
+            <Route path="player-recruitment" element={<PlayerRecruitmentPage />} /> {/* Phase 11 */}
           </Route>
           <Route element={<RequireAuth requireReferee />}>
             <Route path="matches" element={<MatchesPage />} />

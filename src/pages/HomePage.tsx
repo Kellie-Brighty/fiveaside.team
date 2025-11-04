@@ -12,7 +12,6 @@ const HomePage: React.FC = () => {
     isPitchOwner,
     isClubManager,
     isScout,
-    isMinistryOfficial,
     currentUser,
   } = useAuth();
   const [stats, setStats] = useState({
@@ -236,470 +235,179 @@ const HomePage: React.FC = () => {
         <div className="absolute bottom-[-5%] left-[-5%] w-40 h-40 bg-secondary/20 rounded-full blur-xl"></div>
       </div>
 
-      {/* Primary Features Section - Clubs/Talent First */}
-      <section className="mb-12">
-        <h2 className="text-3xl font-bold sport-gradient-text mb-8 text-center">
-          Core Features
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-          {/* Discover & Join Clubs */}
-          <div className="team-card glow-effect">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-primary/10 rounded-bl-full"></div>
-            <div className="relative">
-              <h3 className="text-xl font-bold mb-3 text-primary flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-                Discover & Join Clubs
-              </h3>
-              <p className="text-gray-300 mb-4">
-                Browse official football clubs, view rosters, and request to join.
-                Connect with clubs that match your playing style and career goals.
-              </p>
-              <Link to="/clubs" className="btn-primary inline-block">
-                Browse Clubs
-              </Link>
+      {/* Professional Landing Page Sections */}
+      
+      {/* Features Showcase - Hero Style */}
+      <section className="relative py-20 overflow-hidden mb-20">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-secondary/5"></div>
+        <div className="relative z-10 container mx-auto px-4">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 sport-gradient-text">
+              Everything You Need to Succeed
+            </h2>
+            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
+              A comprehensive platform connecting players, clubs, scouts, and fans in one unified ecosystem
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-16">
+            {/* Club Management Feature */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-dark-lighter/80 backdrop-blur-sm border border-primary/30 rounded-2xl p-8 hover:border-primary/50 transition-all duration-300">
+                <div className="w-14 h-14 bg-gradient-to-br from-primary to-primary/60 rounded-xl flex items-center justify-center mb-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold mb-3 text-white">Official Club Registry</h3>
+                <p className="text-gray-300 mb-6 leading-relaxed">
+                  Register and manage official clubs with comprehensive rosters, transfer systems, and legitimacy verification. 
+                  Build your club's reputation and compete in official leagues.
+                </p>
+                <Link to="/clubs" className="inline-flex items-center text-primary font-semibold hover:text-primary/80 transition-colors">
+                  Explore Clubs
+                  <svg className="ml-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </Link>
+              </div>
+            </div>
+
+            {/* Talent Scouting Feature */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-gradient-to-br from-secondary/20 to-secondary/5 rounded-2xl blur-xl group-hover:blur-2xl transition-all duration-500"></div>
+              <div className="relative bg-dark-lighter/80 backdrop-blur-sm border border-secondary/30 rounded-2xl p-8 hover:border-secondary/50 transition-all duration-300">
+                <div className="w-14 h-14 bg-gradient-to-br from-secondary to-secondary/60 rounded-xl flex items-center justify-center mb-6">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                <h3 className="text-2xl font-bold mb-3 text-white">Advanced Talent Scouting</h3>
+                <p className="text-gray-300 mb-6 leading-relaxed">
+                  Discover and track players with advanced search filters, watchlists, comparison tools, and recruitment pipeline management. 
+                  Connect directly with players and manage your scouting network.
+                </p>
+                <Link to="/talent-pool" className="inline-flex items-center text-secondary font-semibold hover:text-secondary/80 transition-colors">
+                  Discover Talent
+                  <svg className="ml-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                  </svg>
+                </Link>
+              </div>
             </div>
           </div>
 
-          {/* Talent Discovery */}
-          <div className="team-card glow-effect">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-secondary/10 rounded-bl-full"></div>
-            <div className="relative">
-              <h3 className="text-xl font-bold mb-3 text-secondary flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
+          {/* Secondary Features Row */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="bg-dark-lighter/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-primary/30 transition-all duration-300">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
                 </svg>
-                Talent Discovery
-              </h3>
-              <p className="text-gray-300 mb-4">
-                Showcase your skills and get discovered. Scouts and club managers
-                can find you through comprehensive player profiles and statistics.
-              </p>
-              <Link to="/talent-pool" className="btn-secondary inline-block">
-                Explore Talent Pool
-              </Link>
+              </div>
+              <h4 className="text-lg font-bold mb-2 text-white">League Management</h4>
+              <p className="text-gray-400 text-sm mb-4">Automatic fixtures, standings, and comprehensive match tracking</p>
+              <Link to="/leagues" className="text-green-400 text-sm font-medium hover:underline">Browse Leagues →</Link>
             </div>
-          </div>
 
-          {/* Club Registry & Management */}
-          <div className="team-card glow-effect">
-            <div className="absolute top-0 right-0 w-16 h-16 bg-green-500/10 rounded-bl-full"></div>
-            <div className="relative">
-              <h3 className="text-xl font-bold mb-3 text-green-400 flex items-center">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5 mr-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
+            <div className="bg-dark-lighter/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-primary/30 transition-all duration-300">
+              <div className="w-12 h-12 bg-gradient-to-br from-yellow-500 to-yellow-600 rounded-lg flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                 </svg>
-                Club Registry
-              </h3>
-              <p className="text-gray-300 mb-4">
-                Register your official club, manage rosters, and recruit players.
-                Official legitimacy system for professional club operations.
-              </p>
-              {isClubManager || currentUser?.role === "admin" ? (
-                <Link
-                  to="/my-clubs"
-                  className="bg-gradient-to-r from-green-600 to-green-500 text-white px-6 py-2 rounded-md inline-block"
-                >
-                  My Clubs
-                </Link>
-              ) : (
-                <Link to="/club/register" className="btn-primary inline-block">
-                  Register Club
-                </Link>
-              )}
+              </div>
+              <h4 className="text-lg font-bold mb-2 text-white">i-Sale E-commerce</h4>
+              <p className="text-gray-400 text-sm mb-4">Shop official club merchandise, kits, and football gear</p>
+              <Link to="/products" className="text-yellow-400 text-sm font-medium hover:underline">Shop Now →</Link>
+            </div>
+
+            <div className="bg-dark-lighter/50 backdrop-blur-sm border border-gray-700/50 rounded-xl p-6 hover:border-primary/30 transition-all duration-300">
+              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center mb-4">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <h4 className="text-lg font-bold mb-2 text-white">Service Providers</h4>
+              <p className="text-gray-400 text-sm mb-4">Find coaches, referees, and book professional services</p>
+              <Link to="/service-providers" className="text-blue-400 text-sm font-medium hover:underline">Find Services →</Link>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Secondary Features - Pitch/Matches (Grassroots) */}
-      <section className="card p-6 bg-gradient-to-br from-dark-lighter to-dark-lighter/50 border border-primary/30 mb-12 backdrop-blur-sm overflow-hidden relative">
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-primary/10 rounded-full blur-2xl"></div>
-        <div className="relative z-10">
-          <h3 className="text-2xl font-bold mb-4 text-primary">
-            Play Today - Grassroots Football
-          </h3>
-          <p className="text-gray-300 mb-6 max-w-3xl">
-            Not ready for club football? No problem! Find a pitch near you,
-            create your team or join an existing one, and play daily five-a-side
-            matches with friends or new teammates. Winner-stays-on system keeps
-            the action going!
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Link
-              to="/pitches"
-              className="bg-gradient-to-r from-primary to-secondary text-white px-6 py-3 rounded-md shadow-lg shadow-primary/20 text-center"
-            >
-              Find a Pitch
-            </Link>
-            <Link
-              to="/teams"
-              className="bg-dark border border-primary/50 text-primary px-6 py-3 rounded-md hover:bg-dark-lighter text-center transition-colors"
-            >
-              Join Teams
-            </Link>
-            <Link
-              to="/matches"
-              className="bg-dark border border-primary/50 text-primary px-6 py-3 rounded-md hover:bg-dark-lighter text-center transition-colors"
-            >
-              Play Matches
-            </Link>
+      {/* Stats & Social Proof Section */}
+      <section className="relative py-16 mb-20">
+        <div className="absolute inset-0 bg-gradient-to-r from-primary/10 via-transparent to-secondary/10"></div>
+        <div className="relative z-10 container mx-auto px-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-2">
+                {stats.totalClubs}+
+              </div>
+              <div className="text-gray-400 font-medium">Official Clubs</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-secondary to-primary bg-clip-text text-transparent mb-2">
+                {stats.totalPlayers}+
+              </div>
+              <div className="text-gray-400 font-medium">Active Players</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-green-400 mb-2">
+                {stats.legitimateClubs}+
+              </div>
+              <div className="text-gray-400 font-medium">Legitimate Clubs</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl md:text-5xl font-bold text-blue-400 mb-2">
+                {stats.verifiedClubs}+
+              </div>
+              <div className="text-gray-400 font-medium">Verified Clubs</div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Role-Specific Benefits */}
-      {isAuthenticated && (
-        <section className="mb-12">
-          <h2 className="text-3xl font-bold sport-gradient-text mb-8 text-center">
-            Your Platform Benefits
+      {/* Call to Action Section */}
+      <section className="relative py-20 mb-20 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/20 via-secondary/10 to-primary/20"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(120,119,198,0.1),transparent_70%)]"></div>
+        <div className="relative z-10 container mx-auto px-4 text-center">
+          <h2 className="text-4xl md:text-5xl font-bold mb-6 text-white">
+            Ready to Transform Your Football Journey?
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {currentUser?.role === "player" && (
+          <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto">
+            Join thousands of players, clubs, and scouts building the future of grassroots and professional football
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {!isAuthenticated ? (
               <>
-                <div className="card p-6 bg-gradient-to-br from-primary/10 to-transparent border border-primary/30">
-                  <h3 className="text-lg font-bold mb-2 text-primary">
-                    Player Profile
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Showcase your skills, stats, and achievements. Make your
-                    profile visible to scouts and clubs.
-                  </p>
-                  <Link
-                    to="/profile"
-                    className="text-primary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Update Profile →
-                  </Link>
-                </div>
-                <div className="card p-6 bg-gradient-to-br from-secondary/10 to-transparent border border-secondary/30">
-                  <h3 className="text-lg font-bold mb-2 text-secondary">
-                    Transfer Requests
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Request to join clubs and track your transfer history. Build
-                    your career one move at a time.
-                  </p>
-                  <Link
-                    to="/profile"
-                    className="text-secondary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    View Transfers →
-                  </Link>
-                </div>
-                <div className="card p-6 bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/30">
-                  <h3 className="text-lg font-bold mb-2 text-green-400">
-                    Club Opportunities
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Browse official clubs, see available positions, and connect
-                    with managers. Your next opportunity awaits.
-                  </p>
-                  <Link
-                    to="/clubs"
-                    className="text-green-400 text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Browse Clubs →
-                  </Link>
-                </div>
-              </>
-            )}
-
-            {isClubManager && (
-              <>
-                <div className="card p-6 bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/30">
-                  <h3 className="text-lg font-bold mb-2 text-green-400">
-                    Club Management
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Register and manage official clubs, build your roster, and
-                    track player transfers.
-                  </p>
-                  <Link
-                    to="/my-clubs"
-                    className="text-green-400 text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Manage Clubs →
-                  </Link>
-                </div>
-                <div className="card p-6 bg-gradient-to-br from-secondary/10 to-transparent border border-secondary/30">
-                  <h3 className="text-lg font-bold mb-2 text-secondary">
-                    Talent Recruitment
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Discover talented players, review transfer requests, and build
-                    a winning team.
-                  </p>
-                  <Link
-                    to="/talent-pool"
-                    className="text-secondary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Discover Talent →
-                  </Link>
-                </div>
-                <div className="card p-6 bg-gradient-to-br from-primary/10 to-transparent border border-primary/30">
-                  <h3 className="text-lg font-bold mb-2 text-primary">
-                    Legitimacy Status
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Maintain your club's official status with legitimacy fees.
-                    Verified clubs get priority in league participation.
-                  </p>
-                  <Link
-                    to="/my-clubs"
-                    className="text-primary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Check Status →
-                  </Link>
-                </div>
-              </>
-            )}
-
-            {isScout && (
-              <>
-                <div className="card p-6 bg-gradient-to-br from-secondary/10 to-transparent border border-secondary/30">
-                  <h3 className="text-lg font-bold mb-2 text-secondary">
-                    Talent Pool Access
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Browse comprehensive player profiles, filter by position and
-                    skills, and track promising talent.
-                  </p>
-                  <Link
-                    to="/talent-pool"
-                    className="text-secondary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Explore Talent →
-                  </Link>
-                </div>
-                <div className="card p-6 bg-gradient-to-br from-primary/10 to-transparent border border-primary/30">
-                  <h3 className="text-lg font-bold mb-2 text-primary">
-                    Player Tracking
-                  </h3>
-                  <p className="text-gray-300 text-sm">
-                    Add players to your watchlist, track their progress, and build
-                    your scouting network.
-                  </p>
-                  <Link
-                    to="/talent-pool"
-                    className="text-primary text-sm font-medium hover:underline mt-3 inline-block"
-                  >
-                    Start Scouting →
-                  </Link>
-                </div>
-              </>
-            )}
-
-            {isPitchOwner && (
-              <div className="card p-6 bg-gradient-to-br from-green-500/10 to-transparent border border-green-500/30">
-                <h3 className="text-lg font-bold mb-2 text-green-400">
-                  Pitch Management
-                </h3>
-                <p className="text-gray-300 text-sm">
-                  Manage your pitches, track bookings, and host amazing matches
-                  for the community.
-                </p>
                 <Link
-                  to="/pitches"
-                  className="text-green-400 text-sm font-medium hover:underline mt-3 inline-block"
+                  to="/login"
+                  className="px-8 py-4 bg-gradient-to-r from-primary to-secondary text-white font-semibold rounded-lg shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all duration-300 transform hover:scale-105"
                 >
-                  Manage Pitches →
+                  Get Started Free
                 </Link>
-              </div>
-            )}
-
-            {isMinistryOfficial && (
-              <div className="card p-6 bg-gradient-to-br from-blue-500/10 to-transparent border border-blue-500/30">
-                <h3 className="text-lg font-bold mb-2 text-blue-400">
-                  Revenue Oversight
-                </h3>
-                <p className="text-gray-300 text-sm">
-                  View legitimacy fee payments, track revenue, and monitor club
-                  financial compliance.
-                </p>
                 <Link
-                  to="/revenue"
-                  className="text-blue-400 text-sm font-medium hover:underline mt-3 inline-block"
+                  to="/clubs"
+                  className="px-8 py-4 bg-dark-lighter border-2 border-primary/50 text-white font-semibold rounded-lg hover:border-primary hover:bg-primary/10 transition-all duration-300"
                 >
-                  View Reports →
+                  Explore Platform
                 </Link>
-              </div>
+              </>
+            ) : (
+              <Link
+                to="/clubs"
+                className="px-8 py-4 bg-gradient-to-r from-primary to-secondary text-white font-semibold rounded-lg shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/50 transition-all duration-300 transform hover:scale-105"
+              >
+                Start Exploring
+              </Link>
             )}
-          </div>
-        </section>
-      )}
-
-      {/* How It Works Section - Updated for new direction */}
-      <section className="mb-12">
-        <h2 className="text-3xl font-bold sport-gradient-text mb-8 text-center">
-          How It Works
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 sm:gap-8">
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4">
-              <span className="text-xl font-bold text-white">1</span>
-            </div>
-            <h3 className="text-lg sm:text-xl font-medium mb-2">Join</h3>
-            <p className="text-gray-400 text-sm sm:text-base">
-              Sign up as a player, club manager, or scout. Choose your path in
-              the football ecosystem.
-            </p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-secondary/20 flex items-center justify-center mx-auto mb-4">
-              <span className="text-xl font-bold text-white">2</span>
-            </div>
-            <h3 className="text-lg sm:text-xl font-medium mb-2">Discover</h3>
-            <p className="text-gray-400 text-sm sm:text-base">
-              Browse clubs or explore the talent pool. Find your perfect match
-              or discover your next signing.
-            </p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-4">
-              <span className="text-xl font-bold text-white">3</span>
-            </div>
-            <h3 className="text-lg sm:text-xl font-medium mb-2">Connect</h3>
-            <p className="text-gray-400 text-sm sm:text-base">
-              Request transfers, recruit players, or track talent. Build
-              relationships that drive your career forward.
-            </p>
-          </div>
-
-          <div className="text-center">
-            <div className="w-16 h-16 rounded-full bg-yellow-500/20 flex items-center justify-center mx-auto mb-4">
-              <span className="text-xl font-bold text-white">4</span>
-            </div>
-            <h3 className="text-lg sm:text-xl font-medium mb-2">Play</h3>
-            <p className="text-gray-400 text-sm sm:text-base">
-              Join matches, compete in leagues (coming soon), and grow your
-              skills through regular play.
-            </p>
           </div>
         </div>
       </section>
 
-      {/* CTA Section - Role-aware */}
-      <section className="text-center py-10">
-        <h2 className="text-3xl font-bold mb-4">
-          {!isAuthenticated
-            ? "Ready to Start Your Football Journey?"
-            : currentUser?.role === "player"
-            ? "Ready to Join a Club?"
-            : isClubManager
-            ? "Ready to Manage Your Clubs?"
-            : isScout
-            ? "Ready to Discover Talent?"
-            : "Ready to Get Started?"}
-        </h2>
-        <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
-          {!isAuthenticated
-            ? "Join thousands of players, clubs, and scouts building the future of grassroots and professional football."
-            : currentUser?.role === "player"
-            ? "Browse official clubs, request transfers, and take the next step in your football career."
-            : isClubManager
-            ? "Manage your clubs, recruit players, and build winning teams."
-            : isScout
-            ? "Discover talented players and track their progress through comprehensive profiles."
-            : "Explore all features and find what works for you."}
-        </p>
-        {!isAuthenticated ? (
-          <div className="flex flex-wrap justify-center gap-4">
-            <Link
-              to="/login"
-              className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-3 rounded-md shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300"
-            >
-              Get Started Today
-            </Link>
-            <Link
-              to="/clubs"
-              className="text-white px-8 py-3 rounded-md border border-primary/50 hover:bg-primary/10 transition-all duration-300"
-            >
-              Browse Clubs First
-            </Link>
-          </div>
-        ) : currentUser?.role === "player" ? (
-          <div className="flex flex-wrap justify-center gap-4">
-            <Link
-              to="/clubs"
-              className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-3 rounded-md shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300"
-            >
-              Browse Clubs
-            </Link>
-            <Link
-              to="/profile"
-              className="text-white px-8 py-3 rounded-md border border-primary/50 hover:bg-primary/10 transition-all duration-300"
-            >
-              Update Profile
-            </Link>
-          </div>
-        ) : isClubManager ? (
-          <div className="flex flex-wrap justify-center gap-4">
-            <Link
-              to="/my-clubs"
-              className="bg-gradient-to-r from-green-600 to-green-500 text-white px-8 py-3 rounded-md shadow-lg shadow-green-500/20 hover:shadow-xl hover:shadow-green-500/40 transition-all duration-300"
-            >
-              Manage Clubs
-            </Link>
-            <Link
-              to="/talent-pool"
-              className="text-white px-8 py-3 rounded-md border border-secondary/50 hover:bg-secondary/10 transition-all duration-300"
-            >
-              Discover Talent
-            </Link>
-          </div>
-        ) : isScout ? (
-          <Link
-            to="/talent-pool"
-            className="bg-gradient-to-r from-secondary to-primary text-white px-8 py-3 rounded-md shadow-lg shadow-secondary/20 hover:shadow-xl hover:shadow-secondary/40 transition-all duration-300"
-          >
-            Explore Talent Pool
-          </Link>
-        ) : (
-          <Link
-            to="/clubs"
-            className="bg-gradient-to-r from-primary to-secondary text-white px-8 py-3 rounded-md shadow-lg shadow-primary/20 hover:shadow-xl hover:shadow-primary/40 transition-all duration-300"
-          >
-            Browse Clubs
-          </Link>
-        )}
-      </section>
     </div>
   );
 };
