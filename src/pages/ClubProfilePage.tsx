@@ -4,6 +4,8 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { getClub } from "../services/clubService";
 import { getPlayerProfile } from "../services/playerProfileService";
+import { getAllProducts } from "../services/productService";
+import { incrementProductViews } from "../services/productService";
 import {
   createTransferRequest,
   getTransferRequestByPlayerAndClub,
@@ -11,7 +13,7 @@ import {
 } from "../services/transferService";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
-import type { Club, User, PlayerProfile, TransferRequest } from "../types";
+import type { Club, User, PlayerProfile, TransferRequest, Product } from "../types";
 import { hasPermission } from "../utils/permissions";
 import LoadingButton from "../components/LoadingButton";
 
@@ -41,6 +43,8 @@ const ClubProfilePage: React.FC = () => {
   const [position, setPosition] = useState("");
   const [jerseyNumber, setJerseyNumber] = useState("");
   const [message, setMessage] = useState("");
+  const [clubProducts, setClubProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     const loadClubProfile = async () => {
@@ -137,6 +141,24 @@ const ClubProfilePage: React.FC = () => {
     };
 
     loadClubProfile();
+  }, [clubId]);
+
+  // Load club products when clubId is available
+  useEffect(() => {
+    if (clubId) {
+      const loadClubProducts = async () => {
+        try {
+          setLoadingProducts(true);
+          const products = await getAllProducts({ clubId, inStock: true });
+          setClubProducts(products);
+        } catch (error) {
+          console.error("Error loading club products:", error);
+        } finally {
+          setLoadingProducts(false);
+        }
+      };
+      loadClubProducts();
+    }
   }, [clubId]);
 
   if (loading) {
@@ -483,6 +505,107 @@ const ClubProfilePage: React.FC = () => {
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Merchandise Section - Phase 8 */}
+          {clubProducts.length > 0 && (
+            <div className="bg-dark-lighter rounded-xl shadow-xl p-4 sm:p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg sm:text-xl font-bold text-white">Official Merchandise</h2>
+                <Link
+                  to={`/products?club=${club.id}`}
+                  className="text-primary hover:text-primary/80 text-sm font-medium flex items-center gap-1"
+                >
+                  View All
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-4 w-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </Link>
+              </div>
+              {loadingProducts ? (
+                <div className="flex justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                  {clubProducts.slice(0, 4).map((product) => {
+                    const displayPrice =
+                      product.isOnSale && product.discountPrice
+                        ? product.discountPrice
+                        : product.price;
+                    const originalPrice =
+                      product.isOnSale && product.discountPrice ? product.price : null;
+
+                    return (
+                      <Link
+                        key={product.id}
+                        to={`/products/${product.id}`}
+                        onClick={() => incrementProductViews(product.id)}
+                        className="bg-dark rounded-lg overflow-hidden hover:shadow-lg transition-shadow group"
+                      >
+                        <div className="relative aspect-square bg-gray-900 overflow-hidden">
+                          {product.images && product.images.length > 0 ? (
+                            <img
+                              src={product.images[0]}
+                              alt={product.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-12 w-12 text-gray-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                                />
+                              </svg>
+                            </div>
+                          )}
+                          {product.isOnSale && (
+                            <div className="absolute top-2 left-2 bg-red-600 text-white text-xs font-bold px-2 py-1 rounded">
+                              Sale
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-3">
+                          <h3 className="text-white font-medium text-sm mb-1 line-clamp-2">
+                            {product.name}
+                          </h3>
+                          <div className="flex items-center gap-2">
+                            <span className="text-primary font-bold text-sm">
+                              ₦{displayPrice.toLocaleString()}
+                            </span>
+                            {originalPrice && (
+                              <span className="text-gray-500 text-xs line-through">
+                                ₦{originalPrice.toLocaleString()}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </div>

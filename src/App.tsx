@@ -20,7 +20,17 @@ import ClubVerificationPage from "./pages/ClubVerificationPage"; // Phase 4
 import MyClubsPage from "./pages/MyClubsPage"; // Phase 4
 import RevenueReportingPage from "./pages/RevenueReportingPage"; // Phase 4
 import ClubsPage from "./pages/ClubsPage"; // Phase 4.3
+import LeaguesPage from "./pages/LeaguesPage"; // Phase 5
+import LeagueManagementPage from "./pages/LeagueManagementPage"; // Phase 5
+import LeagueViewPage from "./pages/LeagueViewPage"; // Phase 5
+import ProductsPage from "./pages/ProductsPage"; // Phase 8
+import ProductDetailPage from "./pages/ProductDetailPage"; // Phase 8
+import ProductManagementPage from "./pages/ProductManagementPage"; // Phase 8
+import CheckoutPage from "./pages/CheckoutPage"; // Phase 8
+import OrdersPage from "./pages/OrdersPage"; // Phase 8
+import SellerOrdersPage from "./pages/SellerOrdersPage"; // Phase 8
 import AuthProvider, { useAuth } from "./contexts/AuthContext";
+import { CartProvider } from "./contexts/CartContext"; // Phase 8
 import RequireAuth from "./components/RequireAuth";
 import ScrollToTop from "./components/ScrollToTop";
 import LoadingScreen from "./components/LoadingScreen";
@@ -99,6 +109,10 @@ const AppContent: React.FC = () => {
           <Route path="player/:userId" element={<PlayerProfileViewPage />} /> {/* Phase 3 */}
           <Route path="clubs" element={<ClubsPage />} /> {/* Phase 4.3 */}
           <Route path="club/:clubId" element={<ClubProfilePage />} /> {/* Phase 4 */}
+          <Route path="leagues" element={<LeaguesPage />} /> {/* Phase 5 */}
+          <Route path="leagues/:leagueId" element={<LeagueViewPage />} /> {/* Phase 5 */}
+          <Route path="products" element={<ProductsPage />} /> {/* Phase 8 */}
+          <Route path="products/:productId" element={<ProductDetailPage />} /> {/* Phase 8 */}
           <Route element={<RequireAuth />}>
             <Route path="teams" element={<TeamsPage />} />
             <Route path="betting" element={<BettingPage />} />
@@ -109,6 +123,14 @@ const AppContent: React.FC = () => {
             <Route path="club/:clubId/manage" element={<ClubManagementPage />} /> {/* Phase 4 */}
             <Route path="clubs/verify" element={<ClubVerificationPage />} /> {/* Phase 4 */}
             <Route path="revenue" element={<RevenueReportingPage />} /> {/* Phase 4 */}
+            <Route path="leagues/manage" element={<LeagueManagementPage />} /> {/* Phase 5 */}
+            <Route path="leagues/:leagueId/manage" element={<LeagueManagementPage />} /> {/* Phase 5 */}
+            <Route path="products/manage" element={<ProductManagementPage />} /> {/* Phase 8 */}
+            <Route path="checkout" element={<CheckoutPage />} /> {/* Phase 8 */}
+            <Route path="orders" element={<OrdersPage />} /> {/* Phase 8 */}
+            <Route path="orders/:orderId" element={<OrdersPage />} /> {/* Phase 8 */}
+            <Route path="orders/seller" element={<SellerOrdersPage />} /> {/* Phase 8 */}
+            <Route path="orders/seller/:orderId" element={<SellerOrdersPage />} /> {/* Phase 8 */}
           </Route>
           <Route element={<RequireAuth requireReferee />}>
             <Route path="matches" element={<MatchesPage />} />
@@ -127,7 +149,9 @@ const App: React.FC = () => {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <CartProvider>
+          <AppContent />
+        </CartProvider>
       </AuthProvider>
     </Router>
   );

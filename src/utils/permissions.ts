@@ -128,6 +128,7 @@ const rolePermissions: Record<UserRole, Permission[]> = {
     "manage_service_bookings",
     "place_bets",
     "purchase_tickets",
+    "list_products",
     "purchase_products",
   ],
   ministry_official: [

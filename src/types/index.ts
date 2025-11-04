@@ -408,6 +408,7 @@ export interface League {
   id: string;
   name: string;
   description?: string;
+  image?: string; // League image/banner URL
   // League organization
   organizerId: string; // User ID (FA official or ministry official)
   organizerType: "fa" | "ministry" | "admin";
@@ -415,7 +416,8 @@ export interface League {
   season: string; // e.g., "2024/2025"
   startDate: Date;
   endDate: Date;
-  status: "draft" | "registration" | "active" | "completed" | "cancelled";
+  status: "draft" | "registration" | "registration_closed" | "active" | "completed" | "cancelled";
+  registrationClosed: boolean; // Whether registration has been manually closed
   // Participation rules
   minClubs?: number;
   maxClubs?: number;
@@ -446,6 +448,16 @@ export interface Division {
   clubIds: string[]; // Club IDs in this division
 }
 
+// Player match statistics for a fixture
+export interface PlayerMatchStats {
+  userId: string; // Player user ID
+  clubId: string; // Club ID (teamAId or teamBId)
+  goals: number; // Goals scored in this match
+  assists: number; // Assists in this match
+  yellowCards: number; // Yellow cards received (usually 0 or 1)
+  redCard: boolean; // Whether player received red card
+}
+
 // Fixture type for league matches (Phase 1)
 export interface Fixture {
   id: string;
@@ -464,6 +476,7 @@ export interface Fixture {
     winnerId?: string; // Club ID of winner
   };
   refereeId?: string;
+  playerStats?: PlayerMatchStats[]; // Individual player statistics for this match
 }
 
 // StandingsEntry type for league standings (Phase 1)
