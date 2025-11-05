@@ -512,10 +512,6 @@ Enables casual five-a-side matches with winner-stays-on system.
 - **Who Pays**: Club Managers
 - **Who Receives**: FA Officials, Platform
 
-### 5. **Premium Features** (Future)
-- **Source**: Premium subscriptions for advanced features
-- **Examples**: Advanced analytics, priority listing, enhanced visibility
-
 ---
 
 ## Current MVP Status by Feature

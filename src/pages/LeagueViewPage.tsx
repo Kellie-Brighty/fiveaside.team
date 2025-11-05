@@ -322,91 +322,126 @@ const LeagueViewPage: React.FC = () => {
         {activeTab === "standings" && (
           <div className="bg-dark-lighter rounded-xl shadow-xl p-4 sm:p-6">
             <h2 className="text-xl font-bold text-white mb-4">League Standings</h2>
-            {!league.standings || league.standings.length === 0 ? (
-              <p className="text-gray-400 text-center py-8">Standings not available yet</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-3 px-2 text-gray-400 font-medium">Pos</th>
-                      <th className="text-left py-3 px-2 text-gray-400 font-medium">Club</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">P</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">W</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">D</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">L</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">GF</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">GA</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">GD</th>
-                      <th className="text-center py-3 px-2 text-gray-400 font-medium">Pts</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {league.standings.map((standing, _index) => {
-                      const club = clubs.find((c) => c?.id === standing.clubId);
-                      return (
-                        <tr
-                          key={standing.clubId}
-                          className="border-b border-gray-700/50 hover:bg-dark transition-colors"
-                        >
-                          <td className="py-3 px-2 text-white font-medium">
-                            {standing.position}
-                          </td>
-                          <td className="py-3 px-2">
-                            {club ? (
-                              <Link
-                                to={`/club/${club.id}`}
-                                className="text-white hover:text-primary transition-colors"
-                              >
-                                {club.logo ? (
-                                  <div className="flex items-center gap-2">
-                                    <img
-                                      src={club.logo}
-                                      alt={club.name}
-                                      className="w-6 h-6 rounded-full object-cover"
-                                    />
-                                    <span className="truncate">{club.name}</span>
-                                  </div>
-                                ) : (
-                                  club.name
-                                )}
-                              </Link>
-                            ) : (
-                              standing.clubName
-                            )}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.matchesPlayed}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.matchesWon}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.matchesDrawn}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.matchesLost}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.goalsFor}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.goalsAgainst}
-                          </td>
-                          <td className="text-center py-3 px-2 text-gray-300">
-                            {standing.goalDifference > 0 ? "+" : ""}
-                            {standing.goalDifference}
-                          </td>
-                          <td className="text-center py-3 px-2 text-white font-bold">
-                            {standing.points}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {(() => {
+              // Get all registered club IDs from divisions
+              const allClubIds = league.divisions?.flatMap((div) => div.clubIds) || [];
+              
+              // If no clubs registered, show message
+              if (allClubIds.length === 0) {
+                return (
+                  <p className="text-gray-400 text-center py-8">No clubs registered yet</p>
+                );
+              }
+
+              // Use existing standings if available, otherwise create initial standings with all stats at 0
+              const standingsToShow = league.standings && league.standings.length > 0
+                ? league.standings
+                : allClubIds.map((clubId, index) => {
+                    const club = clubs.find((c) => c?.id === clubId);
+                    return {
+                      clubId,
+                      clubName: club?.name || "Unknown Club",
+                      position: index + 1,
+                      matchesPlayed: 0,
+                      matchesWon: 0,
+                      matchesDrawn: 0,
+                      matchesLost: 0,
+                      goalsFor: 0,
+                      goalsAgainst: 0,
+                      goalDifference: 0,
+                      points: 0,
+                    };
+                  });
+
+              return (
+                <div className="overflow-x-auto">
+                  {(!league.standings || league.standings.length === 0) && (
+                    <p className="text-gray-400 text-center py-4 text-sm mb-4">
+                      League hasn't started yet. Standings will update after matches are played.
+                    </p>
+                  )}
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-700">
+                        <th className="text-left py-3 px-2 text-gray-400 font-medium">Pos</th>
+                        <th className="text-left py-3 px-2 text-gray-400 font-medium">Club</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">P</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">W</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">D</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">L</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">GF</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">GA</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">GD</th>
+                        <th className="text-center py-3 px-2 text-gray-400 font-medium">Pts</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {standingsToShow.map((standing, _index) => {
+                        const club = clubs.find((c) => c?.id === standing.clubId);
+                        return (
+                          <tr
+                            key={standing.clubId}
+                            className="border-b border-gray-700/50 hover:bg-dark transition-colors"
+                          >
+                            <td className="py-3 px-2 text-white font-medium">
+                              {standing.position}
+                            </td>
+                            <td className="py-3 px-2">
+                              {club ? (
+                                <Link
+                                  to={`/club/${club.id}`}
+                                  className="text-white hover:text-primary transition-colors"
+                                >
+                                  {club.logo ? (
+                                    <div className="flex items-center gap-2">
+                                      <img
+                                        src={club.logo}
+                                        alt={club.name}
+                                        className="w-6 h-6 rounded-full object-cover"
+                                      />
+                                      <span className="truncate">{club.name}</span>
+                                    </div>
+                                  ) : (
+                                    club.name
+                                  )}
+                                </Link>
+                              ) : (
+                                standing.clubName
+                              )}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.matchesPlayed}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.matchesWon}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.matchesDrawn}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.matchesLost}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.goalsFor}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.goalsAgainst}
+                            </td>
+                            <td className="text-center py-3 px-2 text-gray-300">
+                              {standing.goalDifference > 0 ? "+" : ""}
+                              {standing.goalDifference}
+                            </td>
+                            <td className="text-center py-3 px-2 text-white font-bold">
+                              {standing.points}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         )}
 
