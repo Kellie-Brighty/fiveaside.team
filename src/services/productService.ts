@@ -1,7 +1,5 @@
 // Phase 8: Product Service for E-commerce (i-Sale)
 import {
-  collection,
-  doc,
   setDoc,
   updateDoc,
   getDoc,
@@ -13,7 +11,7 @@ import {
   deleteDoc,
   increment,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
 import type { Product, Order } from "../types";
 import { Timestamp } from "firebase/firestore";
 
@@ -75,10 +73,12 @@ const removeUndefined = (obj: any): any => {
 
 /**
  * Get product by ID
+ * @param productId - The product ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getProduct = async (productId: string): Promise<Product | null> => {
+export const getProduct = async (productId: string, stateId: string): Promise<Product | null> => {
   try {
-    const productDoc = await getDoc(doc(db, "products", productId));
+    const productDoc = await getDoc(getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId, productId));
     
     if (!productDoc.exists()) {
       return null;
@@ -108,15 +108,20 @@ export const getProduct = async (productId: string): Promise<Product | null> => 
 
 /**
  * Get all products
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param filters - Optional filters for products
  */
-export const getAllProducts = async (filters?: {
-  category?: Product["category"];
-  clubId?: string;
-  sellerId?: string;
-  inStock?: boolean;
-}): Promise<Product[]> => {
+export const getAllProducts = async (
+  stateId: string,
+  filters?: {
+    category?: Product["category"];
+    clubId?: string;
+    sellerId?: string;
+    inStock?: boolean;
+  }
+): Promise<Product[]> => {
   try {
-    let productsQuery = query(collection(db, "products"), orderBy("createdAt", "desc"));
+    let productsQuery = query(getStateCollection(COLLECTION_NAMES.PRODUCTS, stateId), orderBy("createdAt", "desc"));
 
     if (filters?.category) {
       productsQuery = query(productsQuery, where("category", "==", filters.category));
@@ -162,12 +167,15 @@ export const getAllProducts = async (filters?: {
 
 /**
  * Create a new product
+ * @param productData - Product data (without id, timestamps, etc.)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const createProduct = async (
-  productData: Omit<Product, "id" | "createdAt" | "updatedAt" | "views" | "sales">
+  productData: Omit<Product, "id" | "createdAt" | "updatedAt" | "views" | "sales">,
+  stateId: string
 ): Promise<Product> => {
   try {
-    const newProductRef = doc(collection(db, "products"));
+    const newProductRef = getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId);
 
     // Remove undefined values from productData first
     const cleanedProductDataInput = removeUndefined(productData);
@@ -199,13 +207,17 @@ export const createProduct = async (
 
 /**
  * Update product
+ * @param productId - The product ID
+ * @param updates - Partial product data to update
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateProduct = async (
   productId: string,
-  updates: Partial<Product>
+  updates: Partial<Product>,
+  stateId: string
 ): Promise<void> => {
   try {
-    const productRef = doc(db, "products", productId);
+    const productRef = getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId, productId);
     
     const updateData = {
       ...updates,
@@ -224,10 +236,12 @@ export const updateProduct = async (
 
 /**
  * Delete product
+ * @param productId - The product ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const deleteProduct = async (productId: string): Promise<void> => {
+export const deleteProduct = async (productId: string, stateId: string): Promise<void> => {
   try {
-    await deleteDoc(doc(db, "products", productId));
+    await deleteDoc(getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId, productId));
   } catch (error) {
     console.error("Error deleting product:", error);
     throw error;
@@ -236,10 +250,12 @@ export const deleteProduct = async (productId: string): Promise<void> => {
 
 /**
  * Increment product views
+ * @param productId - The product ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const incrementProductViews = async (productId: string): Promise<void> => {
+export const incrementProductViews = async (productId: string, stateId: string): Promise<void> => {
   try {
-    const productRef = doc(db, "products", productId);
+    const productRef = getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId, productId);
     await updateDoc(productRef, {
       views: increment(1),
     });
@@ -251,13 +267,17 @@ export const incrementProductViews = async (productId: string): Promise<void> =>
 
 /**
  * Update product stock
+ * @param productId - The product ID
+ * @param quantityChange - Change in quantity (negative for decrease)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateProductStock = async (
   productId: string,
-  quantityChange: number
+  quantityChange: number,
+  stateId: string
 ): Promise<void> => {
   try {
-    const product = await getProduct(productId);
+    const product = await getProduct(productId, stateId);
     if (!product) {
       throw new Error("Product not found");
     }
@@ -267,7 +287,7 @@ export const updateProductStock = async (
     await updateProduct(productId, {
       stockQuantity: newQuantity,
       inStock: newQuantity > 0,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error updating product stock:", error);
     throw error;
@@ -276,12 +296,15 @@ export const updateProductStock = async (
 
 /**
  * Create an order
+ * @param orderData - Order data (without id, orderNumber, createdAt)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const createOrder = async (
-  orderData: Omit<Order, "id" | "orderNumber" | "createdAt">
+  orderData: Omit<Order, "id" | "orderNumber" | "createdAt">,
+  stateId: string
 ): Promise<Order> => {
   try {
-    const newOrderRef = doc(collection(db, "orders"));
+    const newOrderRef = getStateDocument(COLLECTION_NAMES.ORDERS, stateId);
     const orderNumber = `ORD-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
     const orderToCreate = {
@@ -299,7 +322,7 @@ export const createOrder = async (
     // Update product stock for each item
     for (const item of orderData.items) {
       try {
-        await updateProductStock(item.productId, -item.quantity);
+        await updateProductStock(item.productId, -item.quantity, stateId);
       } catch (error) {
         console.error(`Error updating stock for product ${item.productId}:`, error);
         // Continue with other items even if one fails
@@ -309,7 +332,7 @@ export const createOrder = async (
     // Update product sales count
     for (const item of orderData.items) {
       try {
-        const productRef = doc(db, "products", item.productId);
+        const productRef = getStateDocument(COLLECTION_NAMES.PRODUCTS, stateId, item.productId);
         await updateDoc(productRef, {
           sales: increment(item.quantity),
         });
@@ -330,10 +353,12 @@ export const createOrder = async (
 
 /**
  * Get order by ID
+ * @param orderId - The order ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getOrder = async (orderId: string): Promise<Order | null> => {
+export const getOrder = async (orderId: string, stateId: string): Promise<Order | null> => {
   try {
-    const orderDoc = await getDoc(doc(db, "orders", orderId));
+    const orderDoc = await getDoc(getStateDocument(COLLECTION_NAMES.ORDERS, stateId, orderId));
     
     if (!orderDoc.exists()) {
       return null;
@@ -374,11 +399,13 @@ export const getOrder = async (orderId: string): Promise<Order | null> => {
 
 /**
  * Get orders for a user
+ * @param userId - The user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getUserOrders = async (userId: string): Promise<Order[]> => {
+export const getUserOrders = async (userId: string, stateId: string): Promise<Order[]> => {
   try {
     const ordersQuery = query(
-      collection(db, "orders"),
+      getStateCollection(COLLECTION_NAMES.ORDERS, stateId),
       where("userId", "==", userId),
       orderBy("createdAt", "desc")
     );
@@ -424,11 +451,13 @@ export const getUserOrders = async (userId: string): Promise<Order[]> => {
 
 /**
  * Get orders for a seller (orders containing their products)
+ * @param sellerId - The seller ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getSellerOrders = async (sellerId: string): Promise<Order[]> => {
+export const getSellerOrders = async (sellerId: string, stateId: string): Promise<Order[]> => {
   try {
     // Get all products by this seller
-    const sellerProducts = await getAllProducts({ sellerId });
+    const sellerProducts = await getAllProducts(stateId, { sellerId });
     const productIds = sellerProducts.map((p) => p.id);
 
     if (productIds.length === 0) {
@@ -437,7 +466,7 @@ export const getSellerOrders = async (sellerId: string): Promise<Order[]> => {
 
     // Get all orders and filter by products
     const ordersQuery = query(
-      collection(db, "orders"),
+      getStateCollection(COLLECTION_NAMES.ORDERS, stateId),
       orderBy("createdAt", "desc")
     );
 
@@ -491,14 +520,19 @@ export const getSellerOrders = async (sellerId: string): Promise<Order[]> => {
 
 /**
  * Update order status
+ * @param orderId - The order ID
+ * @param status - New order status
+ * @param paymentStatus - Optional payment status
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateOrderStatus = async (
   orderId: string,
   status: Order["status"],
+  stateId: string,
   paymentStatus?: Order["paymentStatus"]
 ): Promise<void> => {
   try {
-    const orderRef = doc(db, "orders", orderId);
+    const orderRef = getStateDocument(COLLECTION_NAMES.ORDERS, stateId, orderId);
     const updateData: any = {
       status,
       updatedAt: serverTimestamp(),

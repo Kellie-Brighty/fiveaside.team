@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllLeagues } from "../services/leagueService";
 import type { League } from "../types";
 
 const LeaguesPage: React.FC = () => {
   const { isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [loading, setLoading] = useState(true);
   const [leagues, setLeagues] = useState<League[]>([]);
   const [filteredLeagues, setFilteredLeagues] = useState<League[]>([]);
@@ -18,12 +20,18 @@ const LeaguesPage: React.FC = () => {
 
   useEffect(() => {
     const loadLeagues = async () => {
+      if (!currentState) {
+        setError("State not available");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
         // Load all leagues (public view)
-        const allLeagues = await getAllLeagues();
+        const allLeagues = await getAllLeagues(currentState.id);
         setLeagues(allLeagues);
         setFilteredLeagues(allLeagues);
       } catch (error) {
@@ -37,7 +45,7 @@ const LeaguesPage: React.FC = () => {
     if (!isLoading) {
       loadLeagues();
     }
-  }, [isLoading]);
+  }, [isLoading, currentState?.id]);
 
   // Apply filters
   useEffect(() => {

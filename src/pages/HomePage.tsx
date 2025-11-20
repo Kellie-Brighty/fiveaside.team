@@ -1,9 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { getAllClubs } from "../services/clubService";
-import { searchPlayerProfiles } from "../services/playerProfileService";
-import shortLogo from "../assets/short-logo.png";
+import { useStateContext } from "../contexts/StateContext";
+import StateUnavailableBanner from "../components/StateUnavailableBanner";
 
 
 const HomePage: React.FC = () => {
@@ -14,71 +13,105 @@ const HomePage: React.FC = () => {
     isScout,
     currentUser,
   } = useAuth();
-  const [stats, setStats] = useState({
+  const { currentState, stateData, isLoadingStateData, isDetectingLocation, detectedStateUnavailable } = useStateContext();
+  
+  // Scroll to top when component mounts
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Get stats from stateData (loaded by StateContext)
+  const stats = stateData?.stats || {
     totalClubs: 0,
     totalPlayers: 0,
     legitimateClubs: 0,
     verifiedClubs: 0,
-  });
-  const [loadingStats, setLoadingStats] = useState(true);
+  };
+  const loadingStats = isLoadingStateData;
 
-  useEffect(() => {
-    // Scroll to top when component mounts
-    window.scrollTo(0, 0);
-
-    // Load statistics
-    const loadStats = async () => {
-      try {
-        setLoadingStats(true);
-        const [allClubs, publicPlayers] = await Promise.all([
-          getAllClubs(),
-          searchPlayerProfiles({ isPublic: true }),
-        ]);
-
-        const legitimateClubs = allClubs.filter((c) => c.isLegitimate).length;
-        const verifiedClubs = allClubs.filter(
-          (c) => c.registrationNumber
-        ).length;
-
-        setStats({
-          totalClubs: allClubs.length,
-          totalPlayers: publicPlayers.length,
-          legitimateClubs,
-          verifiedClubs,
-        });
-      } catch (error) {
-        console.error("Error loading stats:", error);
-      } finally {
-        setLoadingStats(false);
-      }
-    };
-
-    loadStats();
-  }, []);
+  // If no current state (unavailable), show message
+  if (!currentState) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="text-center max-w-md">
+          <div className="mb-6">
+            <svg
+              className="h-16 w-16 text-yellow-400 mx-auto mb-4"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h1 className="text-2xl font-bold text-white mb-4">State Not Available</h1>
+          <p className="text-gray-400 mb-6">
+            {detectedStateUnavailable ? (
+              <>
+                <strong>{detectedStateUnavailable}</strong> is not yet available on MonkeyPost. We're working on expanding to more states soon!
+              </>
+            ) : (
+              "Your current location is not yet available on MonkeyPost. We're working on expanding to more states soon!"
+            )}
+          </p>
+          <p className="text-sm text-gray-500">
+            Please check back later or contact us for more information.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
+      {/* Location Detection Loading */}
+      {isDetectingLocation && (
+        <div className="bg-primary/20 border-l-4 border-primary text-primary p-4 mb-6 rounded-r-lg">
+          <div className="flex items-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-primary mr-3"></div>
+            <p className="text-sm font-medium">
+              Detecting your location to show relevant state data...
+            </p>
+          </div>
+        </div>
+      )}
+      
+      {/* State Unavailable Banner */}
+      <StateUnavailableBanner />
+      
       {/* Hero Section - Prioritize Clubs/Talent */}
       <div className="relative overflow-hidden rounded-xl mb-10">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-secondary/30 backdrop-blur-sm rounded-xl"></div>
+        <div className="absolute inset-0 hero-gradient-bg backdrop-blur-sm rounded-xl"></div>
         <div className="relative z-10 text-center py-12 px-4 sm:py-16">
-          <div className="mb-4 flex justify-center">
+          <div className="mb-4 flex flex-col items-center">
             <img
-              src={shortLogo}
-              alt="MonkeyPost"
-              className="h-16 sm:h-20 w-auto mb-4"
+              src={currentState.logo}
+              alt={currentState.name}
+              className="h-20 sm:h-24 w-auto mb-4 rounded-lg"
             />
+            <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2 tracking-tight">
+              {currentState.title}
+            </h1>
+            <p className="text-sm sm:text-base text-gray-300 mb-4">
+              powered by MonkeyPost
+            </p>
           </div>
           <div className="mb-3">
             <span className="inline-block px-3 py-1 bg-dark text-xs font-medium rounded-full mb-3">
               Comprehensive Football Platform
             </span>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold sport-gradient-text mb-4 tracking-tight">
+          <h2 className="text-4xl sm:text-5xl font-bold sport-gradient-text mb-4 tracking-tight">
             Connect, Play & Grow
-          </h1>
+          </h2>
           <p className="text-lg sm:text-xl text-gray-300 mb-8 max-w-3xl mx-auto">
-            Join official clubs, discover talent, and build your football career.
+            Join official clubs, discover talent, and build your football career in {currentState.name}.
             From grassroots play to professional development - your journey starts
             here.
           </p>
@@ -200,7 +233,14 @@ const HomePage: React.FC = () => {
           )}
 
           {/* Stats Preview */}
-          {!loadingStats && (
+          {loadingStats ? (
+            <div className="mt-8 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-2">
+                <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                <p className="text-sm text-gray-400">Loading {currentState.name} data...</p>
+              </div>
+            </div>
+          ) : (
             <div className="mt-8 grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-2xl mx-auto">
               <div className="text-center">
                 <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">

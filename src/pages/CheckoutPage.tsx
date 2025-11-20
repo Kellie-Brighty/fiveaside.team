@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { createOrder } from "../services/productService";
 import type { Order } from "../types";
 
@@ -12,6 +13,7 @@ declare const PaystackPop: any;
 const CheckoutPage: React.FC = () => {
   const { items, clearCart, getCartTotal, removeFromCart, updateQuantity } = useCart();
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [processing, setProcessing] = useState(false);
@@ -32,6 +34,12 @@ const CheckoutPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!currentState) {
+      window.toast?.error("State not available. Please refresh the page.");
+      return;
+    }
+    
     setProcessing(true);
 
     try {
@@ -91,7 +99,7 @@ const CheckoutPage: React.FC = () => {
                 ...orderData,
                 paymentStatus: "paid",
                 paymentRef: response.reference,
-              });
+              }, currentState.id);
 
               // Update order status to confirmed
               // Note: In a real app, you'd verify payment with your backend first

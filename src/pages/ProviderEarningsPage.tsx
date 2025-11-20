@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getServiceProviderByUserId,
   getProviderBookings,
@@ -10,6 +11,7 @@ import type { ServiceProvider, ServiceBooking } from "../types";
 
 const ProviderEarningsPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [provider, setProvider] = useState<ServiceProvider | null>(null);
@@ -18,16 +20,16 @@ const ProviderEarningsPage: React.FC = () => {
   const [dateRange, setDateRange] = useState<"all" | "today" | "thisWeek" | "thisMonth" | "thisYear">("all");
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
     loadData();
-  }, [currentUser, dateRange]);
+  }, [currentUser, dateRange, currentState?.id]);
 
   const loadData = async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !currentState) return;
 
     try {
       setLoading(true);
-      const providerData = await getServiceProviderByUserId(currentUser.id);
+      const providerData = await getServiceProviderByUserId(currentUser.id, currentState.id);
       if (!providerData) {
         window.toast?.error("You don't have a service provider profile");
         navigate("/service-providers/manage");
@@ -37,7 +39,7 @@ const ProviderEarningsPage: React.FC = () => {
       setProvider(providerData);
 
       // Load all bookings for this provider
-      const allBookings = await getProviderBookings(providerData.id);
+      const allBookings = await getProviderBookings(providerData.id, currentState.id);
       setBookings(allBookings);
     } catch (error) {
       console.error("Error loading earnings data:", error);

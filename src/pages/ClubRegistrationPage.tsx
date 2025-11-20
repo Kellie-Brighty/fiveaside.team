@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { createClub } from "../services/clubService";
 import { uploadImageToImgBB } from "../utils/imgUpload";
 import { hasPermission } from "../utils/permissions";
@@ -10,6 +11,7 @@ import LoadingButton from "../components/LoadingButton";
 
 const ClubRegistrationPage: React.FC = () => {
   const { currentUser, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
@@ -79,6 +81,11 @@ const ClubRegistrationPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+
+    if (!currentState) {
+      window.toast?.error("State not available. Please select a state.");
+      return;
+    }
 
     if (!name.trim()) {
       window.toast?.error("Club name is required");
@@ -163,7 +170,7 @@ const ClubRegistrationPage: React.FC = () => {
       }
 
       // Create club
-      const newClub = await createClub(clubData);
+      const newClub = await createClub(clubData, currentState.id);
 
       window.toast?.success("Club registered successfully!");
       

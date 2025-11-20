@@ -298,6 +298,8 @@ export interface User {
   // Scout specific fields (Phase 1)
   scoutOrganization?: string; // Organization the scout belongs to
   watchlists?: string[]; // Player IDs in scout's watchlist
+  // Multi-state support
+  primaryState?: string; // User's primary state ID (e.g., "kaduna") - determines default state view
 }
 
 // Odds type

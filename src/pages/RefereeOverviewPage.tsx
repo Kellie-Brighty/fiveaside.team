@@ -4,6 +4,7 @@ import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../contexts/AuthContext";
 import { getAllLeagues, updateFixtureScores, completeFixture, startFixture, autoUpdateFixtureStatus, recordFixturePlayerStats } from "../services/leagueService";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllClubs, getClub } from "../services/clubService";
 import { getPlayerProfile } from "../services/playerProfileService";
 import { doc, getDoc } from "firebase/firestore";
@@ -11,6 +12,7 @@ import type { Fixture, Pitch, League, Club, PlayerMatchStats, User } from "../ty
 
 const RefereeOverviewPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [assignedPitches, setAssignedPitches] = useState<Pitch[]>([]);
@@ -82,20 +84,26 @@ const RefereeOverviewPage: React.FC = () => {
         setAssignedPitches(pitches);
         
         // Load league matches assigned to this referee
-        const allLeagues = await getAllLeagues();
-        const allClubs = await getAllClubs();
+        if (!currentState) {
+          setError("State not available");
+          setIsLoading(false);
+          return;
+        }
+        
+        const allLeagues = await getAllLeagues(currentState.id);
+        const allClubs = await getAllClubs(currentState.id);
         
         // Auto-update fixture statuses for all leagues
         for (const league of allLeagues) {
           try {
-            await autoUpdateFixtureStatus(league.id);
+            await autoUpdateFixtureStatus(league.id, currentState.id);
           } catch (error) {
             console.error(`Error auto-updating status for league ${league.id}:`, error);
           }
         }
         
         // Reload leagues after status updates
-        const updatedLeagues = await getAllLeagues();
+        const updatedLeagues = await getAllLeagues(currentState.id);
         const matches: Array<{ league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }> = [];
         
         updatedLeagues.forEach((league) => {
@@ -157,14 +165,19 @@ const RefereeOverviewPage: React.FC = () => {
   };
 
   const handleStartMatch = async (match: { league: League; fixture: Fixture }) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
+    
     try {
       setStartingMatch(true);
-      await startFixture(match.league.id, match.fixture.id);
+      await startFixture(match.league.id, match.fixture.id, currentState.id);
       window.toast?.success("Match started successfully!");
       
       // Reload the league matches
-      const allLeagues = await getAllLeagues();
-      const allClubs = await getAllClubs();
+      const allLeagues = await getAllLeagues(currentState.id);
+      const allClubs = await getAllClubs(currentState.id);
       const matches: Array<{ league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }> = [];
       
       allLeagues.forEach((league) => {
@@ -196,6 +209,11 @@ const RefereeOverviewPage: React.FC = () => {
   };
 
   const handleOpenPlayerStats = async (match: { league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
+    
     setSelectedMatchForStats(match);
     setShowPlayerStatsModal(true);
     setLoadingPlayers(true);
@@ -203,8 +221,8 @@ const RefereeOverviewPage: React.FC = () => {
 
     try {
       // Load club rosters
-      const homeClub = await getClub(match.fixture.teamAId);
-      const awayClub = await getClub(match.fixture.teamBId);
+      const homeClub = await getClub(match.fixture.teamAId, currentState.id);
+      const awayClub = await getClub(match.fixture.teamBId, currentState.id);
 
       const homePlayers: Array<{ user: User; playerProfile?: any }> = [];
       const awayPlayers: Array<{ user: User; playerProfile?: any }> = [];
@@ -218,7 +236,7 @@ const RefereeOverviewPage: React.FC = () => {
               const user = { id: userDoc.id, ...userDoc.data() } as User;
               let playerProfile;
               try {
-                playerProfile = await getPlayerProfile(userId);
+                playerProfile = await getPlayerProfile(userId, currentState.id);
               } catch (error) {
                 // Profile might not exist
               }
@@ -251,7 +269,7 @@ const RefereeOverviewPage: React.FC = () => {
               const user = { id: userDoc.id, ...userDoc.data() } as User;
               let playerProfile;
               try {
-                playerProfile = await getPlayerProfile(userId);
+                playerProfile = await getPlayerProfile(userId, currentState.id);
               } catch (error) {
                 // Profile might not exist
               }
@@ -304,7 +322,7 @@ const RefereeOverviewPage: React.FC = () => {
   };
 
   const handleRecordPlayerStats = async () => {
-    if (!selectedMatchForStats) return;
+    if (!selectedMatchForStats || !currentState) return;
 
     try {
       setRecordingStats(true);
@@ -345,14 +363,20 @@ const RefereeOverviewPage: React.FC = () => {
       await recordFixturePlayerStats(
         selectedMatchForStats.league.id,
         selectedMatchForStats.fixture.id,
-        statsArray
+        statsArray,
+        currentState.id
       );
 
       window.toast?.success("Player statistics recorded successfully!");
       
       // Reload the league matches
-      const allLeagues = await getAllLeagues();
-      const allClubs = await getAllClubs();
+      if (!currentState) {
+        window.toast?.error("State not available");
+        return;
+      }
+      
+      const allLeagues = await getAllLeagues(currentState.id);
+      const allClubs = await getAllClubs(currentState.id);
       const matches: Array<{ league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }> = [];
       
       allLeagues.forEach((league) => {
@@ -384,7 +408,7 @@ const RefereeOverviewPage: React.FC = () => {
   };
 
   const handleUpdateScores = async () => {
-    if (!selectedMatchForResult) return;
+    if (!selectedMatchForResult || !currentState) return;
 
     const scoreAInt = parseInt(scoreA);
     const scoreBInt = parseInt(scoreB);
@@ -408,13 +432,19 @@ const RefereeOverviewPage: React.FC = () => {
         {
           scoreA: scoreAInt,
           scoreB: scoreBInt,
-        }
+        },
+        currentState.id
       );
       window.toast?.success("Scores updated successfully!");
       
       // Reload the league matches
-      const allLeagues = await getAllLeagues();
-      const allClubs = await getAllClubs();
+      if (!currentState) {
+        window.toast?.error("State not available");
+        return;
+      }
+      
+      const allLeagues = await getAllLeagues(currentState.id);
+      const allClubs = await getAllClubs(currentState.id);
       const matches: Array<{ league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }> = [];
       
       allLeagues.forEach((league) => {
@@ -457,7 +487,7 @@ const RefereeOverviewPage: React.FC = () => {
   };
 
   const handleCompleteMatch = async () => {
-    if (!selectedMatchForResult) return;
+    if (!selectedMatchForResult || !currentState) return;
 
     const scoreAInt = parseInt(scoreA);
     const scoreBInt = parseInt(scoreB);
@@ -472,13 +502,19 @@ const RefereeOverviewPage: React.FC = () => {
       setCompletingMatch(true);
       await completeFixture(
         selectedMatchForResult.league.id,
-        selectedMatchForResult.fixture.id
+        selectedMatchForResult.fixture.id,
+        currentState.id
       );
       window.toast?.success("Match completed successfully!");
       
       // Reload the league matches
-      const allLeagues = await getAllLeagues();
-      const allClubs = await getAllClubs();
+      if (!currentState) {
+        window.toast?.error("State not available");
+        return;
+      }
+      
+      const allLeagues = await getAllLeagues(currentState.id);
+      const allClubs = await getAllClubs(currentState.id);
       const matches: Array<{ league: League; fixture: Fixture; homeClub?: Club; awayClub?: Club }> = [];
       
       allLeagues.forEach((league) => {

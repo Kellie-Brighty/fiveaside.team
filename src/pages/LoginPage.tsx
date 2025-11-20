@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import LoadingButton from "../components/LoadingButton";
 import type { UserRole } from "../types";
 import { getRoleDisplayName, getRoleDescription } from "../utils/permissions";
+import { getActiveStates } from "../config/states";
 import shortLogo from "../assets/short-logo.png";
 
 type AuthMode = "login" | "signup";
@@ -226,6 +227,7 @@ const LoginPage: React.FC = () => {
   const [bio, setBio] = useState("");
   const [scoutOrganization, setScoutOrganization] = useState("");
   const [showAdvancedFields, setShowAdvancedFields] = useState(false);
+  const [primaryState, setPrimaryState] = useState<string>(""); // User's primary state
 
   const { login, signup } = useAuth();
   const navigate = useNavigate();
@@ -240,6 +242,10 @@ const LoginPage: React.FC = () => {
         if (password !== confirmPassword) {
           throw new Error("Passwords do not match");
         }
+        // Multi-state support: Require primaryState for all non-admin users
+        if (!primaryState.trim() && role !== "admin") {
+          throw new Error("Please select your primary state");
+        }
         // Phase 2: Build profile data based on role
         const profileData: {
           name?: string;
@@ -249,6 +255,7 @@ const LoginPage: React.FC = () => {
           };
           bio?: string;
           scoutOrganization?: string;
+          primaryState?: string;
         } = {};
 
         if (name.trim()) {
@@ -268,6 +275,12 @@ const LoginPage: React.FC = () => {
 
         if (role === "scout" && scoutOrganization.trim()) {
           profileData.scoutOrganization = scoutOrganization.trim();
+        }
+
+        // Multi-state support: Set primaryState (required for all non-admin users)
+        // Validation already done above, so we can safely add it here
+        if (primaryState.trim() && role !== "admin") {
+          profileData.primaryState = primaryState.trim();
         }
 
         await signup(email, password, role, profileData);
@@ -500,6 +513,29 @@ const LoginPage: React.FC = () => {
                         {getRoleDescription(role)}
                       </p>
                     )}
+                  </div>
+
+                  {/* Multi-state support: Primary State Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                      Primary State <span className="text-red-400">*</span>
+                    </label>
+                    <p className="text-xs text-gray-400 mb-2">
+                      Select your primary state. This will be your default state view.
+                    </p>
+                    <select
+                      value={primaryState}
+                      onChange={(e) => setPrimaryState(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-lg bg-dark border border-gray-700 text-white focus:outline-none focus:border-primary"
+                    >
+                      <option value="">Select your primary state</option>
+                      {getActiveStates().map((state) => (
+                        <option key={state.id} value={state.id}>
+                          {state.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Phase 2: Additional signup fields */}

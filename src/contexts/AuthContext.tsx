@@ -89,6 +89,7 @@ interface AuthContextType {
       };
       bio?: string;
       scoutOrganization?: string;
+      primaryState?: string; // User's primary state ID
     }
   ) => Promise<void>;
   adminSignup: (email: string, password: string) => Promise<void>;
@@ -311,6 +312,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
       bio?: string;
       scoutOrganization?: string;
+      primaryState?: string; // User's primary state ID
     }
   ) => {
     try {
@@ -319,6 +321,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         email,
         password
       );
+
+      // Multi-state support: Require primaryState for all non-admin users
+      if (role !== "admin" && !profileData?.primaryState) {
+        throw new Error("Primary state is required for all users (except admins)");
+      }
 
       // Create user document in Firestore
       const userData: Omit<User, "id"> = {
@@ -335,6 +342,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           lastActive: new Date(),
           device: navigator.userAgent,
         },
+        // Multi-state support: Set primaryState (admins don't have primaryState - they manage all states)
+        // Only set primaryState for non-admin roles (required)
+        ...(role !== "admin" && profileData?.primaryState && {
+          primaryState: profileData.primaryState,
+        }),
         // Phase 2: Add profile data
         ...(profileData?.location && { location: profileData.location }),
         ...(profileData?.bio && { bio: profileData.bio }),
@@ -382,6 +394,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       );
 
       // Create admin user document in Firestore
+      // Admins don't have a primaryState - they can manage all states
       const userData: Omit<User, "id"> = {
         email: firebaseUser.email!,
         name: "Administrator",
@@ -396,6 +409,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           lastActive: new Date(),
           device: navigator.userAgent,
         },
+        // Admins don't have primaryState - they manage all states
       };
 
       await setDoc(doc(db, "users", firebaseUser.uid), userData);

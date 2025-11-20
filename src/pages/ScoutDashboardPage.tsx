@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { hasPermission } from "../utils/permissions";
 import {
   getWatchlist,
@@ -26,6 +27,7 @@ import type { PlayerProfile, User } from "../types";
 
 const ScoutDashboardPage: React.FC = () => {
   const { currentUser, isAuthenticated, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<"watchlist" | "saved-searches" | "notes" | "reports" | "messages" | "recruitment">("watchlist");
   const [watchlist, setWatchlist] = useState<(PlayerProfile & { userId: string; user: User })[]>([]);
@@ -58,17 +60,17 @@ const ScoutDashboardPage: React.FC = () => {
     } else if (!isLoading && !isAuthenticated) {
       setError("Please login to access the scout dashboard");
     }
-  }, [currentUser, isAuthenticated, isLoading]);
+  }, [currentUser, isAuthenticated, isLoading, currentState?.id]);
 
   const loadData = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
       setLoading(true);
       setError(null);
 
       // Load watchlist
-      const watchlistProfiles = await getWatchlist(currentUser.id);
+      const watchlistProfiles = await getWatchlist(currentUser.id, currentState.id);
       
       // Load user data for each profile
       const watchlistWithUsers = await Promise.all(
@@ -95,11 +97,11 @@ const ScoutDashboardPage: React.FC = () => {
       );
 
       // Load saved searches
-      const searches = await getSavedSearches(currentUser.id);
+      const searches = await getSavedSearches(currentUser.id, currentState.id);
       setSavedSearches(searches);
 
       // Load player notes
-      const notes = await getScoutNotes(currentUser.id);
+      const notes = await getScoutNotes(currentUser.id, currentState.id);
       
       // Load player names for notes
       const notesWithPlayerNames = await Promise.all(
@@ -121,7 +123,7 @@ const ScoutDashboardPage: React.FC = () => {
 
       // Load sent messages
       try {
-        const messages = await getScoutSentMessages(currentUser.id);
+        const messages = await getScoutSentMessages(currentUser.id, currentState.id);
         setSentMessages(messages);
       } catch (error) {
         console.error("Error loading sent messages:", error);
@@ -130,7 +132,7 @@ const ScoutDashboardPage: React.FC = () => {
 
       // Load recruitment records
       try {
-        const records = await getScoutRecruitmentRecords(currentUser.id);
+        const records = await getScoutRecruitmentRecords(currentUser.id, currentState.id);
         setRecruitmentRecords(records);
       } catch (error) {
         console.error("Error loading recruitment records:", error);
@@ -145,8 +147,12 @@ const ScoutDashboardPage: React.FC = () => {
   };
 
   const handleDeleteSavedSearch = async (searchId: string) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
     try {
-      await deleteSavedSearch(searchId);
+      await deleteSavedSearch(searchId, currentState.id);
       setSavedSearches(savedSearches.filter((s) => s.id !== searchId));
       if (window.toast) {
         window.toast.success("Saved search deleted");
@@ -527,9 +533,13 @@ const ScoutDashboardPage: React.FC = () => {
                       </button>
                       <button
                         onClick={async () => {
+                          if (!currentState) {
+                            window.toast?.error("State not available");
+                            return;
+                          }
                           if (confirm("Are you sure you want to delete this note?")) {
                             try {
-                              await deletePlayerNote(note.id);
+                              await deletePlayerNote(note.id, currentState.id);
                               setPlayerNotes(playerNotes.filter((n) => n.id !== note.id));
                               if (window.toast) {
                                 window.toast.success("Note deleted");
@@ -975,7 +985,7 @@ const ScoutDashboardPage: React.FC = () => {
             <div className="flex gap-2 mt-6">
               <button
                 onClick={async () => {
-                  if (!selectedPlayerId || !messageSubject || !messageText || !currentUser) {
+                  if (!selectedPlayerId || !messageSubject || !messageText || !currentUser || !currentState) {
                     if (window.toast) {
                       window.toast.error("Please fill in all fields");
                     }
@@ -988,6 +998,7 @@ const ScoutDashboardPage: React.FC = () => {
                       selectedPlayerId,
                       messageSubject,
                       messageText,
+                      currentState.id,
                       messageType
                     );
                     setShowMessageModal(false);
@@ -996,7 +1007,7 @@ const ScoutDashboardPage: React.FC = () => {
                     setMessageText("");
                     setMessageType("general");
                     // Reload messages
-                    const messages = await getScoutSentMessages(currentUser.id);
+                    const messages = await getScoutSentMessages(currentUser.id, currentState.id);
                     setSentMessages(messages);
                     if (window.toast) {
                       window.toast.success("Message sent successfully");
@@ -1094,7 +1105,7 @@ const ScoutDashboardPage: React.FC = () => {
             <div className="flex gap-2 mt-6">
               <button
                 onClick={async () => {
-                  if (!selectedRecruitmentPlayerId || !currentUser) {
+                  if (!selectedRecruitmentPlayerId || !currentUser || !currentState) {
                     if (window.toast) {
                       window.toast.error("Please select a player");
                     }
@@ -1111,14 +1122,16 @@ const ScoutDashboardPage: React.FC = () => {
                         await updateRecruitmentStage(
                           existingRecord.id,
                           recruitmentStage,
-                          recruitmentNotes
+                          recruitmentNotes,
+                          currentState.id
                         );
                       } else {
                         await upsertRecruitmentRecord(
                           currentUser.id,
                           selectedRecruitmentPlayerId,
                           recruitmentStage,
-                          recruitmentNotes
+                          recruitmentNotes,
+                          currentState.id
                         );
                       }
                       setShowRecruitmentModal(false);
@@ -1126,7 +1139,7 @@ const ScoutDashboardPage: React.FC = () => {
                       setRecruitmentStage("interested");
                       setRecruitmentNotes("");
                       // Reload records
-                      const records = await getScoutRecruitmentRecords(currentUser.id);
+                      const records = await getScoutRecruitmentRecords(currentUser.id, currentState.id);
                       setRecruitmentRecords(records);
                       if (window.toast) {
                         window.toast.success("Recruitment record saved");

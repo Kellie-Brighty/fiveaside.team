@@ -10,6 +10,16 @@
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-left: env(safe-area-inset-left, 0px);
   --safe-area-right: env(safe-area-inset-right, 0px);
+  
+  /* State-specific colors (dynamically updated by StateContext) */
+  --state-primary: #8B5CF6; /* Default fallback */
+  --state-primary-dark: #6D28D9;
+  --state-primary-light: #A78BFA;
+  --state-secondary: #EC4899; /* Default fallback */
+  --state-secondary-dark: #BE185D;
+  --state-secondary-light: #F472B6;
+  --state-gradient-start: #8B5CF6;
+  --state-gradient-end: #EC4899;
 }
 
 html,
@@ -39,11 +49,24 @@ h6 {
 }
 
 .sport-gradient {
-  @apply bg-gradient-to-r from-sport-gradient-start to-sport-gradient-end;
+  background: linear-gradient(to right, var(--state-gradient-start), var(--state-gradient-end));
 }
 
 .sport-gradient-text {
-  @apply text-transparent bg-clip-text bg-gradient-to-r from-sport-gradient-start to-sport-gradient-end;
+  background: linear-gradient(to right, var(--state-gradient-start), var(--state-gradient-end));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Hero gradient background with state colors */
+.hero-gradient-bg {
+  background: linear-gradient(
+    to bottom right,
+    rgba(var(--state-primary-rgb), 0.3),
+    rgba(var(--state-secondary-rgb), 0.3)
+  );
 }
 
 /* Custom scrollbar */
@@ -57,11 +80,12 @@ h6 {
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-primary/50 rounded-full;
+  background-color: color-mix(in srgb, var(--state-primary) 50%, transparent);
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-primary;
+  background-color: var(--state-primary);
 }
 
 @layer components {
@@ -70,15 +94,32 @@ h6 {
   }
 
   .btn-primary {
-    @apply btn bg-primary hover:bg-primary-dark text-white;
+    @apply btn text-white;
+    background-color: var(--state-primary);
+  }
+  
+  .btn-primary:hover {
+    background-color: var(--state-primary-dark);
   }
 
   .btn-secondary {
-    @apply btn bg-secondary hover:bg-secondary-dark text-white;
+    @apply btn text-white;
+    background-color: var(--state-secondary);
+  }
+  
+  .btn-secondary:hover {
+    background-color: var(--state-secondary-dark);
   }
 
   .btn-outline {
-    @apply btn border-2 border-primary text-primary hover:bg-primary hover:text-white;
+    @apply btn;
+    border: 2px solid var(--state-primary);
+    color: var(--state-primary);
+  }
+  
+  .btn-outline:hover {
+    background-color: var(--state-primary);
+    color: white;
   }
 
   .card {
@@ -92,8 +133,11 @@ h6 {
 
   .glow-effect::after {
     content: "";
-    @apply absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300 
-           bg-gradient-to-r from-primary/20 to-secondary/20 blur-xl -z-10;
+    @apply absolute inset-0 rounded-lg opacity-0 transition-opacity duration-300 blur-xl -z-10;
+    background: linear-gradient(to right, 
+      color-mix(in srgb, var(--state-primary) 20%, transparent),
+      color-mix(in srgb, var(--state-secondary) 20%, transparent)
+    );
   }
 
   .glow-effect:hover::after {
@@ -125,7 +169,7 @@ h6 {
   }
 
   .nav-item.active {
-    @apply text-primary;
+    color: var(--state-primary);
   }
 
   .match-card {
@@ -147,7 +191,9 @@ h6 {
   }
 
   .team-card:hover {
-    @apply border-primary/30 shadow-lg shadow-primary/10;
+    border-color: color-mix(in srgb, var(--state-primary) 30%, transparent);
+    box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--state-primary) 10%, transparent),
+                0 4px 6px -2px color-mix(in srgb, var(--state-primary) 10%, transparent);
   }
 
   /* Admin dashboard improvements */

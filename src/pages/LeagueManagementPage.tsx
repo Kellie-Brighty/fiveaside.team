@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   createLeague,
   getAllLeagues,
@@ -24,6 +25,7 @@ import type { League, Fixture, Club, Pitch, User } from "../types";
 const LeagueManagementPage: React.FC = () => {
   const { leagueId } = useParams<{ leagueId?: string }>();
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -73,7 +75,7 @@ const LeagueManagementPage: React.FC = () => {
   const [existingImage, setExistingImage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!isAuthLoading && currentUser) {
+    if (!isAuthLoading && currentUser && currentState) {
       const canManage = hasPermission(currentUser.role, "manage_leagues");
       if (!canManage) {
         navigate("/");
@@ -81,18 +83,19 @@ const LeagueManagementPage: React.FC = () => {
       }
       loadLeagues();
     }
-  }, [isAuthLoading, currentUser, navigate]);
+  }, [isAuthLoading, currentUser, navigate, currentState?.id]);
 
   useEffect(() => {
-    if (leagueId) {
+    if (leagueId && currentState) {
       loadLeagueDetails(leagueId);
     }
-  }, [leagueId]);
+  }, [leagueId, currentState?.id]);
 
   const loadLeagues = async () => {
+    if (!currentState) return;
     try {
       setLoading(true);
-      const allLeagues = await getAllLeagues({
+      const allLeagues = await getAllLeagues(currentState.id, {
         organizerId: currentUser?.id,
       });
       setLeagues(allLeagues);
@@ -105,9 +108,10 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const loadLeagueDetails = async (id: string) => {
+    if (!currentState) return;
     try {
       setLoading(true);
-      const league = await getLeague(id);
+      const league = await getLeague(id, currentState.id);
       if (league) {
         setSelectedLeague(league);
         
@@ -115,7 +119,7 @@ const LeagueManagementPage: React.FC = () => {
         if (league.divisions) {
           const allClubIds = league.divisions.flatMap((div) => div.clubIds);
           try {
-            const allClubs = await getAllClubs();
+            const allClubs = await getAllClubs(currentState.id);
             const loadedClubs = allClubs.filter((c) => allClubIds.includes(c.id));
             setClubs(loadedClubs);
           } catch (error) {
@@ -187,7 +191,12 @@ const LeagueManagementPage: React.FC = () => {
 
   const handleCreateLeague = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || !currentState) {
+      if (!currentState) {
+        window.toast?.error("State not available");
+      }
+      return;
+    }
 
     if (!name.trim()) {
       window.toast?.error("League name is required");
@@ -267,7 +276,7 @@ const LeagueManagementPage: React.FC = () => {
         requireLegitimateClubs,
       };
 
-      const newLeague = await createLeague(leagueData);
+      const newLeague = await createLeague(leagueData, currentState.id);
       window.toast?.success("League created successfully!");
       setShowCreateForm(false);
       resetForm();
@@ -282,7 +291,7 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleUpdateLeague = async () => {
-    if (!selectedLeague || !currentUser) return;
+    if (!selectedLeague || !currentUser || !currentState) return;
 
     if (!name.trim()) {
       window.toast?.error("League name is required");
@@ -331,7 +340,7 @@ const LeagueManagementPage: React.FC = () => {
         minClubs: minClubs ? parseInt(minClubs) : undefined,
         maxClubs: maxClubs ? parseInt(maxClubs) : undefined,
         requireLegitimateClubs,
-      });
+      }, currentState.id);
 
       window.toast?.success("League updated successfully!");
       await loadLeagueDetails(selectedLeague.id);
@@ -344,11 +353,11 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleStatusChange = async (status: League["status"]) => {
-    if (!selectedLeague) return;
+    if (!selectedLeague || !currentState) return;
 
     try {
       setSubmitting(true);
-      await updateLeague(selectedLeague.id, { status });
+      await updateLeague(selectedLeague.id, { status }, currentState.id);
       window.toast?.success(`League status updated to ${status}`);
       await loadLeagueDetails(selectedLeague.id);
     } catch (error: any) {
@@ -360,14 +369,14 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleCloseRegistration = async () => {
-    if (!selectedLeague) return;
+    if (!selectedLeague || !currentState) return;
 
     try {
       setClosingRegistration(true);
       await updateLeague(selectedLeague.id, {
         registrationClosed: true,
         status: "registration_closed",
-      });
+      }, currentState.id);
       window.toast?.success("Registration closed successfully!");
       setShowCloseRegistrationModal(false);
       await loadLeagueDetails(selectedLeague.id);
@@ -380,11 +389,11 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleGenerateFixtures = async () => {
-    if (!selectedLeague) return;
+    if (!selectedLeague || !currentState) return;
 
     try {
       setGeneratingFixtures(true);
-      await generateFixtures(selectedLeague.id);
+      await generateFixtures(selectedLeague.id, currentState.id);
       window.toast?.success("Fixtures generated successfully!");
       await loadLeagueDetails(selectedLeague.id);
     } catch (error: any) {
@@ -396,11 +405,11 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleRecalculateStandings = async () => {
-    if (!selectedLeague) return;
+    if (!selectedLeague || !currentState) return;
 
     try {
       setRecalculatingStandings(true);
-      await calculateStandings(selectedLeague.id);
+      await calculateStandings(selectedLeague.id, currentState.id);
       window.toast?.success("Standings recalculated successfully!");
       await loadLeagueDetails(selectedLeague.id);
     } catch (error: any) {
@@ -412,11 +421,11 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleDeleteLeague = async () => {
-    if (!selectedLeague) return;
+    if (!selectedLeague || !currentState) return;
 
     try {
       setDeletingLeague(true);
-      await deleteLeague(selectedLeague.id);
+      await deleteLeague(selectedLeague.id, currentState.id);
       window.toast?.success("League deleted successfully!");
       setShowDeleteModal(false);
       setSelectedLeague(null);
@@ -466,7 +475,7 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleScheduleFixture = async () => {
-    if (!selectedLeague || !selectedFixture) return;
+    if (!selectedLeague || !selectedFixture || !currentState) return;
 
     try {
       setSchedulingFixture(true);
@@ -475,7 +484,7 @@ const LeagueManagementPage: React.FC = () => {
         scheduledTime: scheduleTime || undefined,
         pitchId: selectedPitchId || undefined,
         refereeId: selectedRefereeId || undefined,
-      });
+      }, currentState.id);
       window.toast?.success("Fixture scheduled successfully!");
       setShowFixtureScheduleModal(false);
       await loadLeagueDetails(selectedLeague.id);
@@ -494,13 +503,14 @@ const LeagueManagementPage: React.FC = () => {
   };
 
   const handleDisqualifyClub = async () => {
-    if (!selectedLeague || !clubToDisqualify) return;
+    if (!selectedLeague || !clubToDisqualify || !currentState) return;
 
     try {
       setDisqualifyingClub(true);
       await disqualifyClubFromLeague(
         selectedLeague.id,
-        clubToDisqualify.id
+        clubToDisqualify.id,
+        currentState.id
       );
       window.toast?.success("Club disqualified successfully!");
       setShowDisqualifyModal(false);

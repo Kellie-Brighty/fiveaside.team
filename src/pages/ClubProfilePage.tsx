@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getClub } from "../services/clubService";
 import { getPlayerProfile } from "../services/playerProfileService";
 import { getAllProducts } from "../services/productService";
@@ -20,6 +21,7 @@ import LoadingButton from "../components/LoadingButton";
 const ClubProfilePage: React.FC = () => {
   const { clubId } = useParams<{ clubId: string }>();
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [club, setClub] = useState<Club | null>(null);
@@ -46,10 +48,19 @@ const ClubProfilePage: React.FC = () => {
   const [clubProducts, setClubProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
 
+  // Compute derived values early (before useEffects that use them)
+  const isPlayer = currentUser?.role === "player";
+
   useEffect(() => {
     const loadClubProfile = async () => {
       if (!clubId) {
         setError("Invalid club ID");
+        setLoading(false);
+        return;
+      }
+
+      if (!currentState) {
+        setError("State not available");
         setLoading(false);
         return;
       }
@@ -59,7 +70,7 @@ const ClubProfilePage: React.FC = () => {
         setError(null);
 
         // Load club data
-        const clubData = await getClub(clubId);
+        const clubData = await getClub(clubId, currentState.id);
         if (!clubData) {
           setError("Club not found");
           setLoading(false);
@@ -100,8 +111,10 @@ const ClubProfilePage: React.FC = () => {
                     // Try to load player profile
                     let playerProfile: PlayerProfile | undefined;
                     try {
-                      const profile = await getPlayerProfile(rosterPlayer.userId);
-                      playerProfile = profile || undefined;
+                      if (currentState) {
+                        const profile = await getPlayerProfile(rosterPlayer.userId, currentState.id);
+                        playerProfile = profile || undefined;
+                      }
                     } catch (error) {
                       // Player profile might not exist, that's okay
                       console.log("Player profile not found for", rosterPlayer.userId);
@@ -141,15 +154,34 @@ const ClubProfilePage: React.FC = () => {
     };
 
     loadClubProfile();
-  }, [clubId]);
+  }, [clubId, currentState?.id]);
+
+  // Load transfer request if user is logged in
+  useEffect(() => {
+    if (currentUser && clubId && isPlayer && currentState) {
+      const loadTransferRequest = async () => {
+        try {
+          const request = await getTransferRequestByPlayerAndClub(
+            currentUser.id,
+            clubId,
+            currentState.id
+          );
+          setTransferRequest(request);
+        } catch (error) {
+          console.error("Error loading transfer request:", error);
+        }
+      };
+      loadTransferRequest();
+    }
+  }, [currentUser, clubId, currentState?.id, isPlayer]);
 
   // Load club products when clubId is available
   useEffect(() => {
-    if (clubId) {
+    if (clubId && currentState) {
       const loadClubProducts = async () => {
         try {
           setLoadingProducts(true);
-          const products = await getAllProducts({ clubId, inStock: true });
+          const products = await getAllProducts(currentState.id, { clubId, inStock: true });
           setClubProducts(products);
         } catch (error) {
           console.error("Error loading club products:", error);
@@ -159,7 +191,7 @@ const ClubProfilePage: React.FC = () => {
       };
       loadClubProducts();
     }
-  }, [clubId]);
+  }, [clubId, currentState?.id]);
 
   if (loading) {
     return (
@@ -208,16 +240,15 @@ const ClubProfilePage: React.FC = () => {
 
   const isManager = currentUser && currentUser.id === club.managerId;
   const canManage = isManager || (currentUser && hasPermission(currentUser.role, "manage_clubs"));
-  const isPlayer = currentUser?.role === "player";
   const isInClub = currentUser && club.playerIds.includes(currentUser.id);
   const hasPendingRequest = transferRequest?.status === "pending";
 
   const handleRequestToJoin = async () => {
-    if (!currentUser || !clubId) return;
+    if (!currentUser || !clubId || !currentState) return;
 
     setRequesting(true);
     try {
-      await createTransferRequest(currentUser.id, clubId, {
+      await createTransferRequest(currentUser.id, clubId, currentState.id, {
         position: position.trim() || undefined,
         jerseyNumber: jerseyNumber.trim() ? parseInt(jerseyNumber) : undefined,
         message: message.trim() || undefined,
@@ -232,7 +263,8 @@ const ClubProfilePage: React.FC = () => {
       // Reload transfer request
       const request = await getTransferRequestByPlayerAndClub(
         currentUser.id,
-        clubId
+        clubId,
+        currentState.id
       );
       setTransferRequest(request);
     } catch (error: any) {
@@ -250,11 +282,11 @@ const ClubProfilePage: React.FC = () => {
   };
 
   const confirmCancelRequest = async () => {
-    if (!transferRequest) return;
+    if (!transferRequest || !currentState) return;
 
     setRequesting(true);
     try {
-      await cancelTransferRequest(transferRequest.id);
+      await cancelTransferRequest(transferRequest.id, currentState.id);
       window.toast?.success("Request cancelled");
       setTransferRequest(null);
       setShowCancelConfirmModal(false);
@@ -552,7 +584,7 @@ const ClubProfilePage: React.FC = () => {
                       <Link
                         key={product.id}
                         to={`/products/${product.id}`}
-                        onClick={() => incrementProductViews(product.id)}
+                        onClick={() => currentState && incrementProductViews(product.id, currentState.id)}
                         className="bg-dark rounded-lg overflow-hidden hover:shadow-lg transition-shadow group"
                       >
                         <div className="relative aspect-square bg-gray-900 overflow-hidden">

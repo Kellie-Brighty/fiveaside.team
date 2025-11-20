@@ -1,12 +1,14 @@
 // Phase 8: Product Detail Page
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { useStateContext } from "../contexts/StateContext";
 import { getProduct, incrementProductViews } from "../services/productService";
 import { getClub } from "../services/clubService";
 import { useCart } from "../contexts/CartContext";
 import type { Product, Club } from "../types";
 
 const ProductDetailPage: React.FC = () => {
+  const { currentState } = useStateContext();
   const { productId } = useParams<{ productId: string }>();
   const navigate = useNavigate();
   const { addToCart } = useCart();
@@ -20,15 +22,22 @@ const ProductDetailPage: React.FC = () => {
   const [addingToCart, setAddingToCart] = useState(false);
 
   useEffect(() => {
-    if (productId) {
+    if (productId && currentState) {
       loadProduct();
     }
-  }, [productId]);
+  }, [productId, currentState?.id]);
 
   const loadProduct = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      navigate("/products");
+      return;
+    }
+
     try {
       setLoading(true);
-      const productData = await getProduct(productId!);
+      const productData = await getProduct(productId!, currentState.id);
       if (!productData) {
         window.toast?.error("Product not found");
         navigate("/products");
@@ -39,7 +48,7 @@ const ProductDetailPage: React.FC = () => {
       // Load club if product is club-specific
       if (productData.clubId) {
         try {
-          const clubData = await getClub(productData.clubId);
+          const clubData = await getClub(productData.clubId, currentState.id);
           setClub(clubData);
         } catch (error) {
           console.error("Error loading club:", error);
@@ -48,7 +57,7 @@ const ProductDetailPage: React.FC = () => {
       
       // Increment views
       try {
-        await incrementProductViews(productId!);
+        await incrementProductViews(productId!, currentState.id);
       } catch (error) {
         // Don't show error - this is just analytics
       }

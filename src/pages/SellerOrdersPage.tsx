@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getSellerOrders, getOrder, updateOrderStatus } from "../services/productService";
 import { getAllProducts } from "../services/productService";
 import { hasPermission } from "../utils/permissions";
@@ -9,6 +10,7 @@ import type { Order, Product } from "../types";
 
 const SellerOrdersPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const { orderId } = useParams<{ orderId?: string }>();
   const navigate = useNavigate();
 
@@ -37,19 +39,26 @@ const SellerOrdersPage: React.FC = () => {
       return;
     }
 
+    if (!currentState) return;
+
     if (orderId) {
       loadSingleOrder(orderId);
     } else {
       loadData();
     }
-  }, [currentUser, navigate, orderId]);
+  }, [currentUser, navigate, orderId, currentState?.id]);
 
   const loadSingleOrder = async (id: string) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const [order, sellerProducts] = await Promise.all([
-        getOrder(id),
-        currentUser?.id ? getAllProducts({ sellerId: currentUser.id }) : Promise.resolve([]),
+        getOrder(id, currentState.id),
+        currentUser?.id ? getAllProducts(currentState.id, { sellerId: currentUser.id }) : Promise.resolve([]),
       ]);
       
       if (order) {
@@ -78,12 +87,17 @@ const SellerOrdersPage: React.FC = () => {
   };
 
   const loadData = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       if (currentUser?.id) {
         const [sellerOrders, sellerProducts] = await Promise.all([
-          getSellerOrders(currentUser.id),
-          getAllProducts({ sellerId: currentUser.id }),
+          getSellerOrders(currentUser.id, currentState.id),
+          getAllProducts(currentState.id, { sellerId: currentUser.id }),
         ]);
         setOrders(sellerOrders);
         setProducts(sellerProducts);
@@ -97,18 +111,18 @@ const SellerOrdersPage: React.FC = () => {
   };
 
   const handleUpdateStatus = async () => {
-    if (!selectedOrder) return;
+    if (!selectedOrder || !currentState) return;
 
     try {
       setUpdatingStatus(true);
-      await updateOrderStatus(selectedOrder.id, selectedStatus);
+      await updateOrderStatus(selectedOrder.id, selectedStatus, currentState.id);
       window.toast?.success("Order status updated successfully!");
       setShowStatusModal(false);
       await loadData();
       
       // Reload selected order if it's the same one
-      if (selectedOrder) {
-        const updatedOrder = await getOrder(selectedOrder.id);
+      if (selectedOrder && currentState) {
+        const updatedOrder = await getOrder(selectedOrder.id, currentState.id);
         if (updatedOrder) {
           setSelectedOrder(updatedOrder);
         }

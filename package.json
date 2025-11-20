@@ -7,10 +7,14 @@
     "dev": "vite --host",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "migrate:firestore": "node scripts/migrate-to-state-subcollections.js",
+    "set:primary-state": "node scripts/set-primary-state.js",
+    "init:state": "node scripts/init-state.js"
   },
   "dependencies": {
     "firebase": "^11.6.1",
+    "firebase-admin": "^13.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.5.3"

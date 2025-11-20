@@ -5,14 +5,14 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: "#8B5CF6", // purple
-          dark: "#6D28D9",
-          light: "#A78BFA",
+          DEFAULT: "var(--state-primary)", // Dynamically set by StateContext
+          dark: "var(--state-primary-dark)",
+          light: "var(--state-primary-light)",
         },
         secondary: {
-          DEFAULT: "#EC4899", // pink
-          dark: "#BE185D",
-          light: "#F472B6",
+          DEFAULT: "var(--state-secondary)", // Dynamically set by StateContext
+          dark: "var(--state-secondary-dark)",
+          light: "var(--state-secondary-light)",
         },
         dark: {
           DEFAULT: "#121212",
@@ -21,8 +21,8 @@ export default {
         },
       },
       gradientColorStops: {
-        "sport-gradient-start": "#8B5CF6",
-        "sport-gradient-end": "#EC4899",
+        "sport-gradient-start": "var(--state-gradient-start)",
+        "sport-gradient-end": "var(--state-gradient-end)",
       },
       animation: {
         shake: "shake 0.5s cubic-bezier(.36,.07,.19,.97) both",

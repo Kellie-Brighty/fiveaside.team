@@ -1,14 +1,17 @@
 // Phase 9: Service Providers Directory Page
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllListedServiceProviders } from "../services/serviceProviderService";
 import { incrementProviderViews } from "../services/serviceProviderService";
 import type { ServiceProvider } from "../types";
 
 const ServiceProvidersPage: React.FC = () => {
+  const { currentState } = useStateContext();
   const [providers, setProviders] = useState<ServiceProvider[]>([]);
   const [filteredProviders, setFilteredProviders] = useState<ServiceProvider[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProviderType, setSelectedProviderType] = useState<ServiceProvider["providerType"] | "all">("all");
   const [selectedCity, setSelectedCity] = useState("");
@@ -26,8 +29,10 @@ const ServiceProvidersPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    loadProviders();
-  }, [selectedProviderType, selectedCity, selectedState, minRating]);
+    if (currentState) {
+      loadProviders();
+    }
+  }, [selectedProviderType, selectedCity, selectedState, minRating, currentState?.id]);
 
   useEffect(() => {
     // Apply search query filter
@@ -52,6 +57,11 @@ const ServiceProvidersPage: React.FC = () => {
   }, [searchQuery, providers]);
 
   const loadProviders = async () => {
+    if (!currentState) {
+      setError("Current state not available. Cannot load service providers.");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const filters: any = {};
@@ -68,11 +78,13 @@ const ServiceProvidersPage: React.FC = () => {
         filters.minRating = minRating;
       }
 
-      const allProviders = await getAllListedServiceProviders(filters);
+      const allProviders = await getAllListedServiceProviders(currentState.id, filters);
       setProviders(allProviders);
       setFilteredProviders(allProviders);
+      setError(null);
     } catch (error) {
       console.error("Error loading service providers:", error);
+      setError("Failed to load service providers. Please try again.");
       window.toast?.error("Failed to load service providers");
     } finally {
       setLoading(false);
@@ -80,8 +92,9 @@ const ServiceProvidersPage: React.FC = () => {
   };
 
   const handleProviderClick = async (providerId: string) => {
+    if (!currentState) return;
     try {
-      await incrementProviderViews(providerId);
+      await incrementProviderViews(providerId, currentState.id);
     } catch (error) {
       // Don't show error - this is just analytics
     }
@@ -221,8 +234,15 @@ const ServiceProvidersPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-4 mb-6">
+            <p className="text-red-400">{error}</p>
+          </div>
+        )}
+
         {/* Providers Grid */}
-        {filteredProviders.length === 0 ? (
+        {error ? null : filteredProviders.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-400 text-lg">
               No service providers found matching your criteria.

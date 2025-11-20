@@ -1,17 +1,20 @@
 // Phase 8: Products Page - Browse all products
 import React, { useState, useEffect } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllProducts } from "../services/productService";
 import { incrementProductViews } from "../services/productService";
 import { getAllClubs } from "../services/clubService";
 import type { Product, Club } from "../types";
 
 const ProductsPage: React.FC = () => {
+  const { currentState } = useStateContext();
   const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingClubs, setLoadingClubs] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<Product["category"] | "all">("all");
   const [selectedClubId, setSelectedClubId] = useState<string>(
     searchParams.get("club") || "all"
@@ -29,9 +32,11 @@ const ProductsPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    loadProducts();
-    loadClubs();
-  }, [selectedCategory, selectedClubId]);
+    if (currentState) {
+      loadProducts();
+      loadClubs();
+    }
+  }, [selectedCategory, selectedClubId, currentState?.id]);
 
   useEffect(() => {
     // Sync URL param with state
@@ -42,6 +47,11 @@ const ProductsPage: React.FC = () => {
   }, [searchParams]);
 
   const loadProducts = async () => {
+    if (!currentState) {
+      setError("Current state not available. Cannot load products.");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const filters: any = {};
@@ -51,10 +61,12 @@ const ProductsPage: React.FC = () => {
       if (selectedClubId !== "all") {
         filters.clubId = selectedClubId;
       }
-      const allProducts = await getAllProducts(filters);
+      const allProducts = await getAllProducts(currentState.id, filters);
       setProducts(allProducts.filter((p) => p.inStock));
+      setError(null);
     } catch (error) {
       console.error("Error loading products:", error);
+      setError("Failed to load products. Please try again.");
       window.toast?.error("Failed to load products");
     } finally {
       setLoading(false);
@@ -62,9 +74,10 @@ const ProductsPage: React.FC = () => {
   };
 
   const loadClubs = async () => {
+    if (!currentState) return;
     try {
       setLoadingClubs(true);
-      const allClubs = await getAllClubs();
+      const allClubs = await getAllClubs(currentState.id);
       setClubs(allClubs);
     } catch (error) {
       console.error("Error loading clubs:", error);
@@ -94,8 +107,9 @@ const ProductsPage: React.FC = () => {
   });
 
   const handleProductClick = async (productId: string) => {
+    if (!currentState) return;
     try {
-      await incrementProductViews(productId);
+      await incrementProductViews(productId, currentState.id);
     } catch (error) {
       // Don't show error - this is just analytics
     }
@@ -174,7 +188,11 @@ const ProductsPage: React.FC = () => {
         </div>
 
         {/* Products Grid */}
-        {loading ? (
+        {error ? (
+          <div className="text-center py-20">
+            <p className="text-red-400 text-lg">{error}</p>
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
           </div>

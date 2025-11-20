@@ -2,6 +2,7 @@
 // Phase 3: Extended with Player Profile features
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { uploadImageToImgBB } from "../utils/imgUpload";
 import { uploadVideoToCloudinary } from "../utils/videoUpload"; // Phase 3
 import LoadingButton from "../components/LoadingButton";
@@ -26,6 +27,7 @@ import type { PlayerProfile, Achievement, TransferRequest, Club } from "../types
 
 const ProfilePage: React.FC = () => {
   const { currentUser, updateUserProfile, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [isLoadingPlayerProfile, setIsLoadingPlayerProfile] = useState(false); // Phase 3: Used for loading state in future
@@ -92,11 +94,11 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Load player profile data if user is a player
   useEffect(() => {
-    if (currentUser && isPlayer) {
+    if (currentUser && isPlayer && currentState) {
       const loadPlayerProfile = async () => {
         try {
           setIsLoadingPlayerProfile(true);
-          const profile = await getPlayerProfile(currentUser.id);
+          const profile = await getPlayerProfile(currentUser.id, currentState.id);
           if (profile) {
             setPlayerProfile(profile);
             setHeight(profile.height?.toString() || "");
@@ -127,21 +129,21 @@ const ProfilePage: React.FC = () => {
 
       loadPlayerProfile();
     }
-  }, [currentUser, isPlayer]);
+  }, [currentUser, isPlayer, currentState?.id]);
 
   // Phase 4.3: Load transfer history for players
   useEffect(() => {
-    if (currentUser && isPlayer) {
+    if (currentUser && isPlayer && currentState) {
       const loadTransferHistory = async () => {
         try {
           setTransferHistoryLoading(true);
-          const requests = await getTransferRequestsByPlayer(currentUser.id);
+          const requests = await getTransferRequestsByPlayer(currentUser.id, currentState.id);
           
           // Load club data for each request
           const requestsWithClubs = await Promise.all(
             requests.map(async (request) => {
               try {
-                const club = await getClub(request.clubId);
+                const club = await getClub(request.clubId, currentState.id);
                 return {
                   ...request,
                   club: club || undefined,
@@ -163,7 +165,7 @@ const ProfilePage: React.FC = () => {
 
       loadTransferHistory();
     }
-  }, [currentUser, isPlayer]);
+  }, [currentUser, isPlayer, currentState?.id]);
 
   // Phase 4.3: Handle cancel transfer request - show confirmation first
   const handleCancelTransferRequest = (requestId: string) => {
@@ -173,19 +175,19 @@ const ProfilePage: React.FC = () => {
 
   // Phase 4.3: Confirm cancel transfer request
   const confirmCancelTransferRequest = async () => {
-    if (!requestToCancel || !currentUser) return;
+    if (!requestToCancel || !currentUser || !currentState) return;
 
     try {
       setCancellingRequest(true);
-      await cancelTransferRequest(requestToCancel);
+      await cancelTransferRequest(requestToCancel, currentState.id);
       window.toast?.success("Request cancelled");
       
       // Reload transfer history
-      const requests = await getTransferRequestsByPlayer(currentUser.id);
+      const requests = await getTransferRequestsByPlayer(currentUser.id, currentState.id);
       const requestsWithClubs = await Promise.all(
         requests.map(async (request) => {
           try {
-            const club = await getClub(request.clubId);
+            const club = await getClub(request.clubId, currentState.id);
             return {
               ...request,
               club: club || undefined,
@@ -232,7 +234,7 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Video upload handler
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!currentUser || !e.target.files || !e.target.files[0]) return;
+    if (!currentUser || !currentState || !e.target.files || !e.target.files[0]) return;
 
     const file = e.target.files[0];
     try {
@@ -243,7 +245,7 @@ const ProfilePage: React.FC = () => {
         setVideoUploadProgress(progress);
       });
 
-      await addVideoToProfile(currentUser.id, videoUrl);
+      await addVideoToProfile(currentUser.id, videoUrl, currentState.id);
       setHighlightVideos((prev) => [...prev, videoUrl]);
       window.toast?.success("Video uploaded successfully!");
     } catch (error) {
@@ -262,10 +264,10 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Remove video handler
   const handleRemoveVideo = async (videoUrl: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
-      await removeVideoFromProfile(currentUser.id, videoUrl);
+      await removeVideoFromProfile(currentUser.id, videoUrl, currentState.id);
       setHighlightVideos((prev) => prev.filter((url) => url !== videoUrl));
       window.toast?.success("Video removed successfully!");
     } catch (error) {
@@ -278,7 +280,7 @@ const ProfilePage: React.FC = () => {
   const handleGalleryImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
-    if (!currentUser || !e.target.files || !e.target.files[0]) return;
+    if (!currentUser || !currentState || !e.target.files || !e.target.files[0]) return;
 
     const file = e.target.files[0];
     if (file.size > 5 * 1024 * 1024) {
@@ -289,7 +291,7 @@ const ProfilePage: React.FC = () => {
     try {
       setIsUploadingImage(true);
       const imageUrl = await uploadImageToImgBB(file);
-      await addImageToProfile(currentUser.id, imageUrl);
+      await addImageToProfile(currentUser.id, imageUrl, currentState.id);
       setImages((prev) => [...prev, imageUrl]);
       window.toast?.success("Image added to gallery!");
     } catch (error) {
@@ -303,10 +305,10 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Remove image from gallery
   const handleRemoveImage = async (imageUrl: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
-      await removeImageFromProfile(currentUser.id, imageUrl);
+      await removeImageFromProfile(currentUser.id, imageUrl, currentState.id);
       setImages((prev) => prev.filter((url) => url !== imageUrl));
       window.toast?.success("Image removed successfully!");
     } catch (error) {
@@ -317,8 +319,12 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Add achievement handler
   const handleAddAchievement = async () => {
-    if (!currentUser || !achievementTitle || !achievementDate) {
-      window.toast?.error("Please fill in all required fields");
+    if (!currentUser || !currentState || !achievementTitle || !achievementDate) {
+      if (!currentState) {
+        window.toast?.error("State not available");
+      } else {
+        window.toast?.error("Please fill in all required fields");
+      }
       return;
     }
 
@@ -328,7 +334,7 @@ const ProfilePage: React.FC = () => {
         description: achievementDescription || undefined,
         date: new Date(achievementDate),
         category: achievementCategory,
-      });
+      }, currentState.id);
 
       const newAchievement: Achievement = {
         id: `ach_${Date.now()}`,
@@ -353,10 +359,10 @@ const ProfilePage: React.FC = () => {
 
   // Phase 3: Delete achievement handler
   const handleDeleteAchievement = async (achievementId: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
-      await deleteAchievement(currentUser.id, achievementId);
+      await deleteAchievement(currentUser.id, achievementId, currentState.id);
       setAchievements((prev) =>
         prev.filter((ach) => ach.id !== achievementId)
       );
@@ -425,7 +431,7 @@ const ProfilePage: React.FC = () => {
       await updateUserProfile(updateData);
 
       // Phase 3: Save player profile data if user is a player
-      if (isPlayer) {
+      if (isPlayer && currentState) {
         try {
           await savePlayerProfile(currentUser.id, {
             height: height ? parseFloat(height) : undefined,
@@ -438,7 +444,7 @@ const ProfilePage: React.FC = () => {
             achievements,
             // Stats are managed separately, not through form
             stats: playerProfile?.stats,
-          });
+          }, currentState.id);
         } catch (error) {
           console.error("Error saving player profile:", error);
           window.toast?.error("User profile saved, but player profile failed to save.");

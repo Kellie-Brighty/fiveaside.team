@@ -1,7 +1,7 @@
 // Phase 11: Scout Service for Firestore operations
 import {
-  collection,
   doc,
+  collection,
   setDoc,
   updateDoc,
   getDoc,
@@ -14,6 +14,8 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
+import { getPlayerProfile } from "./playerProfileService";
 import type { User, PlayerProfile } from "../types";
 
 /**
@@ -112,9 +114,12 @@ export const removeFromWatchlist = async (
 
 /**
  * Get scout's watchlist with player profiles
+ * @param scoutId - The scout user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getWatchlist = async (
-  scoutId: string
+  scoutId: string,
+  stateId: string
 ): Promise<(PlayerProfile & { userId: string; user: User })[]> => {
   try {
     const userRef = doc(db, "users", scoutId);
@@ -142,24 +147,16 @@ export const getWatchlist = async (
 
           const playerUser = { id: playerUserDoc.id, ...playerUserDoc.data() } as User;
           
-          // Get player profile
-          const profileQuery = query(
-            collection(db, "playerProfiles"),
-            where("userId", "==", playerId)
-          );
-          const profileSnapshot = await getDocs(profileQuery);
+          // Get player profile using state-specific service
+          const profile = await getPlayerProfile(playerId, stateId);
           
-          if (profileSnapshot.empty) {
+          if (!profile) {
             return null;
           }
 
-          const profileData = profileSnapshot.docs[0].data();
           return {
-            id: profileSnapshot.docs[0].id,
+            ...profile,
             userId: playerId,
-            ...profileData,
-            createdAt: toDate(profileData.createdAt),
-            lastUpdated: toDate(profileData.lastUpdated),
             user: playerUser,
           } as PlayerProfile & { userId: string; user: User };
         } catch (error) {
@@ -223,14 +220,19 @@ export interface SavedSearch {
 
 /**
  * Create a saved search
+ * @param scoutId - The scout user ID
+ * @param name - Search name
+ * @param filters - Search filters
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const createSavedSearch = async (
   scoutId: string,
   name: string,
-  filters: SavedSearch["filters"]
+  filters: SavedSearch["filters"],
+  stateId: string
 ): Promise<string> => {
   try {
-    const searchRef = doc(collection(db, "savedSearches"));
+    const searchRef = getStateDocument(COLLECTION_NAMES.SAVED_SEARCHES, stateId);
     await setDoc(searchRef, {
       scoutId,
       name,
@@ -247,13 +249,16 @@ export const createSavedSearch = async (
 
 /**
  * Get all saved searches for a scout
+ * @param scoutId - The scout user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getSavedSearches = async (
-  scoutId: string
+  scoutId: string,
+  stateId: string
 ): Promise<SavedSearch[]> => {
   try {
     const q = query(
-      collection(db, "savedSearches"),
+      getStateCollection(COLLECTION_NAMES.SAVED_SEARCHES, stateId),
       where("scoutId", "==", scoutId),
       orderBy("createdAt", "desc")
     );
@@ -275,12 +280,15 @@ export const getSavedSearches = async (
 
 /**
  * Update saved search last used timestamp
+ * @param savedSearchId - The saved search ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateSavedSearchLastUsed = async (
-  savedSearchId: string
+  savedSearchId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const savedSearchRef = doc(db, "savedSearches", savedSearchId);
+    const savedSearchRef = getStateDocument(COLLECTION_NAMES.SAVED_SEARCHES, stateId, savedSearchId);
     await updateDoc(savedSearchRef, {
       lastUsed: serverTimestamp(),
     });
@@ -292,12 +300,15 @@ export const updateSavedSearchLastUsed = async (
 
 /**
  * Delete a saved search
+ * @param savedSearchId - The saved search ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const deleteSavedSearch = async (
-  savedSearchId: string
+  savedSearchId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    await deleteDoc(doc(db, "savedSearches", savedSearchId));
+    await deleteDoc(getStateDocument(COLLECTION_NAMES.SAVED_SEARCHES, stateId, savedSearchId));
   } catch (error) {
     console.error("Error deleting saved search:", error);
     throw error;
@@ -317,16 +328,21 @@ export interface PlayerNote {
 
 /**
  * Create or update a note for a player
+ * @param scoutId - The scout user ID
+ * @param playerId - The player user ID
+ * @param note - Note text
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const savePlayerNote = async (
   scoutId: string,
   playerId: string,
-  note: string
+  note: string,
+  stateId: string
 ): Promise<string> => {
   try {
     // Check if note exists
     const notesQuery = query(
-      collection(db, "playerNotes"),
+      getStateCollection(COLLECTION_NAMES.PLAYER_NOTES, stateId),
       where("scoutId", "==", scoutId),
       where("playerId", "==", playerId)
     );
@@ -335,14 +351,14 @@ export const savePlayerNote = async (
     if (!notesSnapshot.empty) {
       // Update existing note
       const noteDoc = notesSnapshot.docs[0];
-      await updateDoc(doc(db, "playerNotes", noteDoc.id), {
+      await updateDoc(getStateDocument(COLLECTION_NAMES.PLAYER_NOTES, stateId, noteDoc.id), {
         note,
         updatedAt: serverTimestamp(),
       });
       return noteDoc.id;
     } else {
       // Create new note
-      const noteRef = doc(collection(db, "playerNotes"));
+      const noteRef = getStateDocument(COLLECTION_NAMES.PLAYER_NOTES, stateId);
       await setDoc(noteRef, {
         scoutId,
         playerId,
@@ -360,14 +376,18 @@ export const savePlayerNote = async (
 
 /**
  * Get note for a player by a scout
+ * @param scoutId - The scout user ID
+ * @param playerId - The player user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getPlayerNote = async (
   scoutId: string,
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<PlayerNote | null> => {
   try {
     const notesQuery = query(
-      collection(db, "playerNotes"),
+      getStateCollection(COLLECTION_NAMES.PLAYER_NOTES, stateId),
       where("scoutId", "==", scoutId),
       where("playerId", "==", playerId)
     );
@@ -392,13 +412,16 @@ export const getPlayerNote = async (
 
 /**
  * Get all notes for a scout
+ * @param scoutId - The scout user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getScoutNotes = async (
-  scoutId: string
+  scoutId: string,
+  stateId: string
 ): Promise<PlayerNote[]> => {
   try {
     const notesQuery = query(
-      collection(db, "playerNotes"),
+      getStateCollection(COLLECTION_NAMES.PLAYER_NOTES, stateId),
       where("scoutId", "==", scoutId),
       orderBy("updatedAt", "desc")
     );
@@ -421,10 +444,12 @@ export const getScoutNotes = async (
 
 /**
  * Delete a player note
+ * @param noteId - The note ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const deletePlayerNote = async (noteId: string): Promise<void> => {
+export const deletePlayerNote = async (noteId: string, stateId: string): Promise<void> => {
   try {
-    await deleteDoc(doc(db, "playerNotes", noteId));
+    await deleteDoc(getStateDocument(COLLECTION_NAMES.PLAYER_NOTES, stateId, noteId));
   } catch (error) {
     console.error("Error deleting player note:", error);
     throw error;
@@ -479,16 +504,23 @@ export interface PlayerReply {
 
 /**
  * Send a message from scout to player
+ * @param scoutId - The scout user ID
+ * @param playerId - The player user ID
+ * @param subject - Message subject
+ * @param message - Message text
+ * @param type - Message type
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const sendScoutMessage = async (
   scoutId: string,
   playerId: string,
   subject: string,
   message: string,
+  stateId: string,
   type: ScoutMessage["type"] = "general"
 ): Promise<string> => {
   try {
-    const messageRef = doc(collection(db, "scoutMessages"));
+    const messageRef = getStateDocument(COLLECTION_NAMES.SCOUT_MESSAGES, stateId);
     await setDoc(messageRef, {
       scoutId,
       playerId,
@@ -507,14 +539,17 @@ export const sendScoutMessage = async (
 
 /**
  * Get messages sent by a scout to players
+ * @param scoutId - The scout user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getScoutSentMessages = async (
-  scoutId: string
+  scoutId: string,
+  stateId: string
 ): Promise<(ScoutMessage & { playerName?: string })[]> => {
   try {
     // First query without orderBy to avoid index requirement
     const q = query(
-      collection(db, "scoutMessages"),
+      getStateCollection(COLLECTION_NAMES.SCOUT_MESSAGES, stateId),
       where("scoutId", "==", scoutId)
     );
     const querySnapshot = await getDocs(q);
@@ -557,14 +592,17 @@ export const getScoutSentMessages = async (
 
 /**
  * Get messages received by a player from scouts
+ * @param playerId - The player user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getPlayerReceivedMessages = async (
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<(ScoutMessage & { scoutName?: string; scoutOrganization?: string })[]> => {
   try {
     // Query without orderBy to avoid index requirement
     const q = query(
-      collection(db, "scoutMessages"),
+      getStateCollection(COLLECTION_NAMES.SCOUT_MESSAGES, stateId),
       where("playerId", "==", playerId)
     );
     const querySnapshot = await getDocs(q);
@@ -610,10 +648,12 @@ export const getPlayerReceivedMessages = async (
 
 /**
  * Mark message as read
+ * @param messageId - The message ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const markMessageAsRead = async (messageId: string): Promise<void> => {
+export const markMessageAsRead = async (messageId: string, stateId: string): Promise<void> => {
   try {
-    await updateDoc(doc(db, "scoutMessages", messageId), {
+    await updateDoc(getStateDocument(COLLECTION_NAMES.SCOUT_MESSAGES, stateId, messageId), {
       status: "read",
       readAt: serverTimestamp(),
     });
@@ -625,26 +665,33 @@ export const markMessageAsRead = async (messageId: string): Promise<void> => {
 
 /**
  * Reply to a scout message
+ * @param messageId - The message ID
+ * @param playerId - The player user ID
+ * @param scoutId - The scout user ID
+ * @param reply - Reply text
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const replyToScoutMessage = async (
   messageId: string,
   playerId: string,
   scoutId: string,
-  reply: string
+  reply: string,
+  stateId: string
 ): Promise<string> => {
   try {
-    // Create reply document
-    const replyRef = doc(collection(db, "playerReplies"));
+    // Create reply document (using scoutMessages collection for replies - same state)
+    const replyRef = getStateDocument(COLLECTION_NAMES.SCOUT_MESSAGES, stateId);
     await setDoc(replyRef, {
       messageId,
       playerId,
       scoutId,
       reply,
       createdAt: serverTimestamp(),
+      isReply: true,
     });
 
     // Update original message status
-    await updateDoc(doc(db, "scoutMessages", messageId), {
+    await updateDoc(getStateDocument(COLLECTION_NAMES.SCOUT_MESSAGES, stateId, messageId), {
       status: "replied",
       repliedAt: serverTimestamp(),
     });
@@ -658,23 +705,31 @@ export const replyToScoutMessage = async (
 
 /**
  * Get replies to a message
+ * @param messageId - The message ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getMessageReplies = async (
-  messageId: string
+  messageId: string,
+  stateId: string
 ): Promise<PlayerReply[]> => {
   try {
+    // Replies are stored in the same scoutMessages collection with isReply flag
     const q = query(
-      collection(db, "playerReplies"),
+      getStateCollection(COLLECTION_NAMES.SCOUT_MESSAGES, stateId),
       where("messageId", "==", messageId),
+      where("isReply", "==", true),
       orderBy("createdAt", "asc")
     );
     const querySnapshot = await getDocs(q);
     
-    return querySnapshot.docs.map((doc) => {
-      const data = doc.data();
+    return querySnapshot.docs.map((replyDoc) => {
+      const data = replyDoc.data();
       return {
-        id: doc.id,
-        ...data,
+        id: replyDoc.id,
+        messageId: data.messageId,
+        playerId: data.playerId,
+        scoutId: data.scoutId,
+        reply: data.reply,
         createdAt: toDate(data.createdAt),
         readAt: data.readAt ? toDate(data.readAt) : undefined,
       } as PlayerReply;
@@ -722,18 +777,25 @@ export interface RecruitmentRecord {
 
 /**
  * Create or update a recruitment record
+ * @param scoutId - The scout user ID
+ * @param playerId - The player user ID
+ * @param stage - Recruitment stage
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param notes - Optional notes
+ * @param offerDetails - Optional offer details
  */
 export const upsertRecruitmentRecord = async (
   scoutId: string,
   playerId: string,
   stage: RecruitmentStage,
+  stateId: string,
   notes?: string,
   offerDetails?: RecruitmentRecord["offerDetails"]
 ): Promise<string> => {
   try {
     // Check if record exists
     const recordsQuery = query(
-      collection(db, "recruitmentRecords"),
+      getStateCollection(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId),
       where("scoutId", "==", scoutId),
       where("playerId", "==", playerId)
     );
@@ -761,11 +823,11 @@ export const upsertRecruitmentRecord = async (
         updatedAt: serverTimestamp(),
         stageHistory,
       });
-      await updateDoc(doc(db, "recruitmentRecords", recordDoc.id), updateData);
+      await updateDoc(getStateDocument(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId, recordDoc.id), updateData);
       return recordDoc.id;
     } else {
       // Create new record
-      const recordRef = doc(collection(db, "recruitmentRecords"));
+      const recordRef = getStateDocument(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId);
       const recordData = removeUndefined({
         scoutId,
         playerId,
@@ -793,14 +855,18 @@ export const upsertRecruitmentRecord = async (
 
 /**
  * Get recruitment record for a scout-player pair
+ * @param scoutId - The scout user ID
+ * @param playerId - The player user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getRecruitmentRecord = async (
   scoutId: string,
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<RecruitmentRecord | null> => {
   try {
     const recordsQuery = query(
-      collection(db, "recruitmentRecords"),
+      getStateCollection(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId),
       where("scoutId", "==", scoutId),
       where("playerId", "==", playerId)
     );
@@ -837,14 +903,17 @@ export const getRecruitmentRecord = async (
 
 /**
  * Get all recruitment records for a player (from all scouts)
+ * @param playerId - The player user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getPlayerRecruitmentRecords = async (
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<(RecruitmentRecord & { scoutName?: string })[]> => {
   try {
     // Query without orderBy to avoid index requirement
     const q = query(
-      collection(db, "recruitmentRecords"),
+      getStateCollection(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId),
       where("playerId", "==", playerId)
     );
     const querySnapshot = await getDocs(q);
@@ -908,14 +977,17 @@ export const getPlayerRecruitmentRecords = async (
 
 /**
  * Get all recruitment records for a scout
+ * @param scoutId - The scout user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getScoutRecruitmentRecords = async (
-  scoutId: string
+  scoutId: string,
+  stateId: string
 ): Promise<(RecruitmentRecord & { playerName?: string })[]> => {
   try {
     // First query without orderBy to avoid index requirement
     const q = query(
-      collection(db, "recruitmentRecords"),
+      getStateCollection(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId),
       where("scoutId", "==", scoutId)
     );
     const querySnapshot = await getDocs(q);
@@ -979,14 +1051,19 @@ export const getScoutRecruitmentRecords = async (
 
 /**
  * Update recruitment stage
+ * @param recordId - The recruitment record ID
+ * @param newStage - New recruitment stage
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param notes - Optional notes
  */
 export const updateRecruitmentStage = async (
   recordId: string,
   newStage: RecruitmentStage,
+  stateId: string,
   notes?: string
 ): Promise<void> => {
   try {
-    const recordDoc = await getDoc(doc(db, "recruitmentRecords", recordId));
+    const recordDoc = await getDoc(getStateDocument(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId, recordId));
     if (!recordDoc.exists()) {
       throw new Error("Recruitment record not found");
     }
@@ -998,12 +1075,12 @@ export const updateRecruitmentStage = async (
     if (existingData.stage !== newStage) {
       stageHistory.push({
         stage: newStage,
-        changedAt: serverTimestamp(),
+        changedAt: Timestamp.now(),
         notes,
       });
     }
 
-    await updateDoc(doc(db, "recruitmentRecords", recordId), {
+    await updateDoc(getStateDocument(COLLECTION_NAMES.RECRUITMENT_RECORDS, stateId, recordId), {
       stage: newStage,
       notes: notes || existingData.notes,
       updatedAt: serverTimestamp(),

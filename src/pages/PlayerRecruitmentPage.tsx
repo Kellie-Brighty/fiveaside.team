@@ -1,6 +1,7 @@
 // Phase 11: Player Recruitment Page - View recruitment records from scouts
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getPlayerRecruitmentRecords,
   type RecruitmentRecord,
@@ -9,22 +10,23 @@ import LoadingScreen from "../components/LoadingScreen";
 
 const PlayerRecruitmentPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [records, setRecords] = useState<(RecruitmentRecord & { scoutName?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedRecord, setSelectedRecord] = useState<string | null>(null);
 
   useEffect(() => {
-    if (currentUser && !isAuthLoading) {
+    if (currentUser && !isAuthLoading && currentState) {
       loadRecruitmentRecords();
     }
-  }, [currentUser, isAuthLoading]);
+  }, [currentUser, isAuthLoading, currentState?.id]);
 
   const loadRecruitmentRecords = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
       setLoading(true);
-      const fetchedRecords = await getPlayerRecruitmentRecords(currentUser.id);
+      const fetchedRecords = await getPlayerRecruitmentRecords(currentUser.id, currentState.id);
       setRecords(fetchedRecords);
     } catch (error) {
       console.error("Error loading recruitment records:", error);

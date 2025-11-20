@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getServiceProvider,
   createServiceBooking,
@@ -17,6 +18,7 @@ const ServiceBookingPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { currentUser, isAuthenticated } = useAuth();
+  const { currentState } = useStateContext();
 
   const [provider, setProvider] = useState<ServiceProvider | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -38,10 +40,10 @@ const ServiceBookingPage: React.FC = () => {
       return;
     }
 
-    if (providerId) {
+    if (providerId && currentState) {
       loadProvider();
     }
-  }, [providerId, isAuthenticated]);
+  }, [providerId, isAuthenticated, currentState?.id]);
 
   useEffect(() => {
     // If serviceId is in URL params, select that service
@@ -58,9 +60,15 @@ const ServiceBookingPage: React.FC = () => {
   }, [searchParams, provider]);
 
   const loadProvider = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      navigate("/service-providers");
+      return;
+    }
     try {
       setLoading(true);
-      const providerData = await getServiceProvider(providerId!);
+      const providerData = await getServiceProvider(providerId!, currentState.id);
       if (!providerData) {
         window.toast?.error("Service provider not found");
         navigate("/service-providers");
@@ -87,7 +95,7 @@ const ServiceBookingPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!provider || !selectedService || !currentUser) return;
+    if (!provider || !selectedService || !currentUser || !currentState) return;
 
     if (!bookingData.scheduledDate || !bookingData.scheduledTime) {
       window.toast?.error("Please select a date and time");
@@ -142,7 +150,7 @@ const ServiceBookingPage: React.FC = () => {
                 ...bookingDataToCreate,
                 paymentStatus: "paid",
                 paymentRef: response.reference,
-              });
+              }, currentState.id);
 
               window.toast?.success("Booking created successfully!");
               navigate(`/service-bookings/${bookingId}`);

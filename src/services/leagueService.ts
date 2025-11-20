@@ -1,7 +1,5 @@
 // Phase 5: League Service for Firestore operations
 import {
-  collection,
-  doc,
   getDoc,
   getDocs,
   setDoc,
@@ -13,7 +11,7 @@ import {
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
 import type { League, Division, Fixture, StandingsEntry } from "../types";
 
 /**
@@ -70,6 +68,8 @@ const removeUndefined = (obj: any): any => {
 
 /**
  * Create a new league
+ * @param leagueData - League data (without id, timestamps, etc.)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const createLeague = async (
   leagueData: Omit<
@@ -81,10 +81,11 @@ export const createLeague = async (
     | "standings"
     | "divisions"
     | "pointsSystem"
-  >
+  >,
+  stateId: string
 ): Promise<League> => {
   try {
-    const newLeagueRef = doc(collection(db, "leagues"));
+    const newLeagueRef = getStateDocument(COLLECTION_NAMES.LEAGUES, stateId);
 
     const leagueToCreate = {
       ...leagueData,
@@ -120,10 +121,12 @@ export const createLeague = async (
 
 /**
  * Get league by ID
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getLeague = async (leagueId: string): Promise<League | null> => {
+export const getLeague = async (leagueId: string, stateId: string): Promise<League | null> => {
   try {
-    const leagueDoc = await getDoc(doc(db, "leagues", leagueId));
+    const leagueDoc = await getDoc(getStateDocument(COLLECTION_NAMES.LEAGUES, stateId, leagueId));
 
     if (!leagueDoc.exists()) {
       return null;
@@ -158,15 +161,20 @@ export const getLeague = async (leagueId: string): Promise<League | null> => {
 
 /**
  * Get all leagues (with optional filters)
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param filters - Optional filters for leagues
  */
-export const getAllLeagues = async (filters?: {
-  status?: League["status"];
-  organizerId?: string;
-  season?: string;
-}): Promise<League[]> => {
+export const getAllLeagues = async (
+  stateId: string,
+  filters?: {
+    status?: League["status"];
+    organizerId?: string;
+    season?: string;
+  }
+): Promise<League[]> => {
   try {
     let leaguesQuery = query(
-      collection(db, "leagues"),
+      getStateCollection(COLLECTION_NAMES.LEAGUES, stateId),
       orderBy("createdAt", "desc")
     );
 
@@ -222,13 +230,17 @@ export const getAllLeagues = async (filters?: {
 
 /**
  * Update league
+ * @param leagueId - The league ID
+ * @param updates - Partial league data to update
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateLeague = async (
   leagueId: string,
-  updates: Partial<League>
+  updates: Partial<League>,
+  stateId: string
 ): Promise<void> => {
   try {
-    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueRef = getStateDocument(COLLECTION_NAMES.LEAGUES, stateId, leagueId);
 
     // Convert Date objects to Firestore timestamps if needed
     const updateData: any = { ...updates, updatedAt: serverTimestamp() };
@@ -269,13 +281,17 @@ export const updateLeague = async (
 
 /**
  * Register club for a league
+ * @param leagueId - The league ID
+ * @param clubId - The club ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const registerClubForLeague = async (
   leagueId: string,
-  clubId: string
+  clubId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -326,13 +342,13 @@ export const registerClubForLeague = async (
 
     await updateLeague(leagueId, {
       divisions: updatedDivisions,
-    });
+    }, stateId);
 
     // Update club's currentLeagueId
     const { updateClub } = await import("./clubService");
     await updateClub(clubId, {
       currentLeagueId: leagueId,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error registering club for league:", error);
     throw error;
@@ -341,10 +357,12 @@ export const registerClubForLeague = async (
 
 /**
  * Generate fixtures for a league (round-robin)
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const generateFixtures = async (leagueId: string): Promise<Fixture[]> => {
+export const generateFixtures = async (leagueId: string, stateId: string): Promise<Fixture[]> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -398,7 +416,7 @@ export const generateFixtures = async (leagueId: string): Promise<Fixture[]> => 
     await updateLeague(leagueId, {
       fixtures,
       status: "registration_closed", // Registration closed, fixtures generated, but not active yet
-    });
+    }, stateId);
 
     return fixtures;
   } catch (error) {
@@ -409,12 +427,15 @@ export const generateFixtures = async (leagueId: string): Promise<Fixture[]> => 
 
 /**
  * Calculate and update standings for a league
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const calculateStandings = async (
-  leagueId: string
+  leagueId: string,
+  stateId: string
 ): Promise<StandingsEntry[]> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -425,7 +446,7 @@ export const calculateStandings = async (
 
     // Get club names for standings
     const { getClub } = await import("./clubService");
-    const clubPromises = allClubIds.map((clubId) => getClub(clubId));
+    const clubPromises = allClubIds.map((clubId) => getClub(clubId, stateId));
     const clubs = await Promise.all(clubPromises);
 
     // Initialize standings for all clubs
@@ -522,7 +543,7 @@ export const calculateStandings = async (
     // Update league standings
     await updateLeague(leagueId, {
       standings,
-    });
+    }, stateId);
 
     return standings;
   } catch (error) {
@@ -533,10 +554,12 @@ export const calculateStandings = async (
 
 /**
  * Delete a league
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const deleteLeague = async (leagueId: string): Promise<void> => {
+export const deleteLeague = async (leagueId: string, stateId: string): Promise<void> => {
   try {
-    const leagueRef = doc(db, "leagues", leagueId);
+    const leagueRef = getStateDocument(COLLECTION_NAMES.LEAGUES, stateId, leagueId);
     const leagueDoc = await getDoc(leagueRef);
 
     if (!leagueDoc.exists()) {
@@ -552,6 +575,10 @@ export const deleteLeague = async (leagueId: string): Promise<void> => {
 
 /**
  * Update fixture scores during match (live score updates)
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param scores - Score data
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateFixtureScores = async (
   leagueId: string,
@@ -559,10 +586,11 @@ export const updateFixtureScores = async (
   scores: {
     scoreA: number; // Score for teamAId
     scoreB: number; // Score for teamBId
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -604,7 +632,7 @@ export const updateFixtureScores = async (
 
     await updateLeague(leagueId, {
       fixtures: updatedFixtures,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error updating fixture scores:", error);
     throw error;
@@ -613,13 +641,17 @@ export const updateFixtureScores = async (
 
 /**
  * Complete a fixture (mark as completed and finalize results)
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const completeFixture = async (
   leagueId: string,
-  fixtureId: string
+  fixtureId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -650,15 +682,15 @@ export const completeFixture = async (
 
     await updateLeague(leagueId, {
       fixtures: updatedFixtures,
-    });
+    }, stateId);
 
     // Recalculate standings
-    await calculateStandings(leagueId);
+    await calculateStandings(leagueId, stateId);
 
     // Update player profiles with stats from this match
     if (fixture.playerStats && fixture.playerStats.length > 0) {
       try {
-        await updatePlayerStatsFromFixture(fixtureId, leagueId);
+        await updatePlayerStatsFromFixture(fixtureId, leagueId, stateId);
       } catch (error) {
         console.error("Error updating player stats:", error);
         // Don't throw - stats update is secondary to result recording
@@ -673,6 +705,10 @@ export const completeFixture = async (
 /**
  * Record match result for a fixture (legacy - kept for backwards compatibility)
  * @deprecated Use updateFixtureScores and completeFixture instead
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param result - Match result
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const recordFixtureResult = async (
   leagueId: string,
@@ -680,16 +716,21 @@ export const recordFixtureResult = async (
   result: {
     scoreA: number; // Score for teamAId
     scoreB: number; // Score for teamBId
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   // First update scores
-  await updateFixtureScores(leagueId, fixtureId, result);
+  await updateFixtureScores(leagueId, fixtureId, result, stateId);
   // Then complete the match
-  await completeFixture(leagueId, fixtureId);
+  await completeFixture(leagueId, fixtureId, stateId);
 };
 
 /**
  * Update fixture scheduling (date, time, pitch, referee)
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param schedule - Schedule data
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateFixtureSchedule = async (
   leagueId: string,
@@ -699,10 +740,11 @@ export const updateFixtureSchedule = async (
     scheduledTime?: string;
     pitchId?: string;
     refereeId?: string;
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -727,7 +769,7 @@ export const updateFixtureSchedule = async (
 
     await updateLeague(leagueId, {
       fixtures: updatedFixtures,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error updating fixture schedule:", error);
     throw error;
@@ -736,13 +778,17 @@ export const updateFixtureSchedule = async (
 
 /**
  * Update fixture status to in-progress
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const startFixture = async (
   leagueId: string,
-  fixtureId: string
+  fixtureId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -768,7 +814,7 @@ export const startFixture = async (
 
     await updateLeague(leagueId, {
       fixtures: updatedFixtures,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error starting fixture:", error);
     throw error;
@@ -778,12 +824,15 @@ export const startFixture = async (
 /**
  * Auto-update fixture status based on scheduled time
  * Checks if match time has arrived and updates status to "in-progress"
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const autoUpdateFixtureStatus = async (
-  leagueId: string
+  leagueId: string,
+  stateId: string
 ): Promise<{ updated: number }> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -838,7 +887,7 @@ export const autoUpdateFixtureStatus = async (
     if (updatedCount > 0) {
       await updateLeague(leagueId, {
         fixtures: updatedFixtures,
-      });
+      }, stateId);
     }
 
     return { updated: updatedCount };
@@ -850,6 +899,10 @@ export const autoUpdateFixtureStatus = async (
 
 /**
  * Record player statistics for a fixture
+ * @param leagueId - The league ID
+ * @param fixtureId - The fixture ID
+ * @param playerStats - Player statistics
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const recordFixturePlayerStats = async (
   leagueId: string,
@@ -861,10 +914,11 @@ export const recordFixturePlayerStats = async (
     assists: number;
     yellowCards: number;
     redCard: boolean;
-  }>
+  }>,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -905,7 +959,7 @@ export const recordFixturePlayerStats = async (
 
     await updateLeague(leagueId, {
       fixtures: updatedFixtures,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error recording player stats:", error);
     throw error;
@@ -915,13 +969,17 @@ export const recordFixturePlayerStats = async (
 /**
  * Update player profiles with match statistics
  * This should be called after a fixture is completed
+ * @param fixtureId - The fixture ID
+ * @param leagueId - The league ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updatePlayerStatsFromFixture = async (
   fixtureId: string,
-  leagueId: string
+  leagueId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -950,7 +1008,7 @@ export const updatePlayerStatsFromFixture = async (
     // Update stats for each player
     for (const playerStat of fixture.playerStats) {
       try {
-        let profile = await getPlayerProfile(playerStat.userId);
+        let profile = await getPlayerProfile(playerStat.userId, stateId);
 
         if (!profile) {
           // Create profile if it doesn't exist
@@ -966,7 +1024,7 @@ export const updatePlayerStatsFromFixture = async (
               redCards: 0,
             },
             isPublic: false,
-          });
+          }, stateId);
         }
 
         const currentStats = profile.stats || {
@@ -1008,7 +1066,7 @@ export const updatePlayerStatsFromFixture = async (
 
         await savePlayerProfile(playerStat.userId, {
           stats: updatedStats,
-        });
+        }, stateId);
       } catch (error) {
         console.error(`Error updating stats for player ${playerStat.userId}:`, error);
         // Continue with other players even if one fails
@@ -1022,13 +1080,17 @@ export const updatePlayerStatsFromFixture = async (
 
 /**
  * Disqualify a club from a league
+ * @param leagueId - The league ID
+ * @param clubId - The club ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const disqualifyClubFromLeague = async (
   leagueId: string,
   clubId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       throw new Error("League not found");
     }
@@ -1059,13 +1121,13 @@ export const disqualifyClubFromLeague = async (
       divisions: updatedDivisions,
       fixtures: updatedFixtures,
       standings: updatedStandings,
-    });
+    }, stateId);
 
     // Update club's currentLeagueId
     const { updateClub } = await import("./clubService");
     await updateClub(clubId, {
       currentLeagueId: undefined,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error disqualifying club from league:", error);
     throw error;
@@ -1074,16 +1136,20 @@ export const disqualifyClubFromLeague = async (
 
 /**
  * Check player eligibility for league matches
+ * @param leagueId - The league ID
+ * @param playerId - The player ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const checkPlayerEligibility = async (
   leagueId: string,
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<{
   eligible: boolean;
   reasons: string[];
 }> => {
   try {
-    const league = await getLeague(leagueId);
+    const league = await getLeague(leagueId, stateId);
     if (!league) {
       return { eligible: false, reasons: ["League not found"] };
     }
@@ -1092,7 +1158,7 @@ export const checkPlayerEligibility = async (
 
     // Get player profile
     const { getPlayerProfile } = await import("./playerProfileService");
-    const playerProfile = await getPlayerProfile(playerId);
+    const playerProfile = await getPlayerProfile(playerId, stateId);
 
     if (!playerProfile) {
       return { eligible: false, reasons: ["Player profile not found"] };
@@ -1110,7 +1176,7 @@ export const checkPlayerEligibility = async (
     
     let isInLeagueClub = false;
     for (const clubId of allClubIds) {
-      const club = await getClub(clubId);
+      const club = await getClub(clubId, stateId);
       if (club?.playerIds?.includes(playerId)) {
         isInLeagueClub = true;
         break;

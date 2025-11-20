@@ -2,12 +2,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { createServiceProvider, getServiceProviderByUserId } from "../services/serviceProviderService";
 import type { ServiceProvider } from "../types";
 import LoadingButton from "../components/LoadingButton";
 
 const ServiceProviderRegistrationPage: React.FC = () => {
   const { currentUser, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -37,15 +39,17 @@ const ServiceProviderRegistrationPage: React.FC = () => {
   ];
 
   useEffect(() => {
-    checkExistingProfile();
-  }, [currentUser, isLoading]);
+    if (currentState) {
+      checkExistingProfile();
+    }
+  }, [currentUser, isLoading, currentState?.id]);
 
   const checkExistingProfile = async () => {
-    if (!currentUser || isLoading) return;
+    if (!currentUser || isLoading || !currentState) return;
 
     // Check if user already has a service provider profile
     try {
-      const existing = await getServiceProviderByUserId(currentUser.id);
+      const existing = await getServiceProviderByUserId(currentUser.id, currentState.id);
       if (existing) {
         window.toast?.info("You already have a service provider profile");
         navigate("/service-providers/manage");
@@ -79,7 +83,7 @@ const ServiceProviderRegistrationPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     if (!specialization.trim()) {
       window.toast?.error("Specialization is required");
@@ -125,7 +129,7 @@ const ServiceProviderRegistrationPage: React.FC = () => {
         bookings: 0,
       };
 
-      await createServiceProvider(providerData);
+      await createServiceProvider(providerData, currentState.id);
       window.toast?.success("Service provider profile created successfully!");
       navigate("/service-providers/manage");
     } catch (error) {

@@ -1,6 +1,7 @@
 // Phase 11: Player Messages Page - View messages from scouts
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getPlayerReceivedMessages,
   markMessageAsRead,
@@ -12,6 +13,7 @@ import LoadingScreen from "../components/LoadingScreen";
 
 const PlayerMessagesPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [messages, setMessages] = useState<(ScoutMessage & { scoutName?: string; scoutOrganization?: string })[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
@@ -21,17 +23,17 @@ const PlayerMessagesPage: React.FC = () => {
   const [messageReplies, setMessageReplies] = useState<{ [key: string]: any[] }>({});
 
   useEffect(() => {
-    if (currentUser && !isAuthLoading) {
+    if (currentUser && !isAuthLoading && currentState) {
       loadMessages();
     }
-  }, [currentUser, isAuthLoading]);
+  }, [currentUser, isAuthLoading, currentState?.id]);
 
   const loadMessages = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
       setLoading(true);
-      const fetchedMessages = await getPlayerReceivedMessages(currentUser.id);
+      const fetchedMessages = await getPlayerReceivedMessages(currentUser.id, currentState.id);
       setMessages(fetchedMessages);
     } catch (error) {
       console.error("Error loading messages:", error);
@@ -51,9 +53,9 @@ const PlayerMessagesPage: React.FC = () => {
     
     // Mark as read if not already
     const message = messages.find(m => m.id === messageId);
-    if (message && message.status === "sent") {
+    if (message && message.status === "sent" && currentState) {
       try {
-        await markMessageAsRead(messageId);
+        await markMessageAsRead(messageId, currentState.id);
         setMessages(prev => prev.map(m => 
           m.id === messageId ? { ...m, status: "read" as const, readAt: new Date() } : m
         ));
@@ -63,8 +65,9 @@ const PlayerMessagesPage: React.FC = () => {
     }
 
     // Load replies
+    if (!currentState) return;
     try {
-      const replies = await getMessageReplies(messageId);
+      const replies = await getMessageReplies(messageId, currentState.id);
       setMessageReplies(prev => ({ ...prev, [messageId]: replies }));
     } catch (error) {
       console.error("Error loading replies:", error);
@@ -72,14 +75,14 @@ const PlayerMessagesPage: React.FC = () => {
   };
 
   const handleReplyToMessage = async () => {
-    if (!selectedMessage || !currentUser || !replyText.trim()) return;
+    if (!selectedMessage || !currentUser || !currentState || !replyText.trim()) return;
 
     const message = messages.find(m => m.id === selectedMessage);
     if (!message) return;
 
     try {
       setSendingReply(true);
-      await replyToScoutMessage(selectedMessage, currentUser.id, message.scoutId, replyText);
+      await replyToScoutMessage(selectedMessage, currentUser.id, message.scoutId, replyText, currentState.id);
       
       // Update message status
       setMessages(prev => prev.map(m => 
@@ -87,7 +90,7 @@ const PlayerMessagesPage: React.FC = () => {
       ));
       
       // Reload replies
-      const replies = await getMessageReplies(selectedMessage);
+      const replies = await getMessageReplies(selectedMessage, currentState.id);
       setMessageReplies(prev => ({ ...prev, [selectedMessage]: replies }));
       
       setReplyText("");

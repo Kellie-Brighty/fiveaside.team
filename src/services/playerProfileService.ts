@@ -1,7 +1,5 @@
 // Phase 3: Player Profile Service for Firestore operations
 import {
-  collection,
-  doc,
   setDoc,
   updateDoc,
   query,
@@ -9,18 +7,54 @@ import {
   getDocs,
   serverTimestamp,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
 import type { PlayerProfile, Achievement } from "../types";
 
 /**
+ * Remove undefined values from an object (Firestore doesn't allow undefined)
+ */
+const removeUndefined = (obj: any): any => {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+
+  if (obj instanceof Date || obj instanceof Array) {
+    return obj;
+  }
+
+  if (typeof obj !== "object") {
+    return obj;
+  }
+
+  const cleaned: any = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (typeof value === "object" && value !== null && !(value instanceof Date) && !Array.isArray(value)) {
+        const cleanedNested = removeUndefined(value);
+        // Only include nested object if it has properties
+        if (Object.keys(cleanedNested).length > 0) {
+          cleaned[key] = cleanedNested;
+        }
+      } else {
+        cleaned[key] = value;
+      }
+    }
+  }
+  return cleaned;
+};
+
+/**
  * Get player profile by user ID
+ * @param userId - The user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const getPlayerProfile = async (
-  userId: string
+  userId: string,
+  stateId: string
 ): Promise<PlayerProfile | null> => {
   try {
     const profileQuery = query(
-      collection(db, "playerProfiles"),
+      getStateCollection(COLLECTION_NAMES.PLAYERS, stateId),
       where("userId", "==", userId)
     );
     const querySnapshot = await getDocs(profileQuery);
@@ -54,14 +88,18 @@ export const getPlayerProfile = async (
 
 /**
  * Create or update player profile
+ * @param userId - The user ID
+ * @param profileData - Profile data to save
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const savePlayerProfile = async (
   userId: string,
-  profileData: Partial<PlayerProfile>
+  profileData: Partial<PlayerProfile>,
+  stateId: string
 ): Promise<PlayerProfile> => {
   try {
     // Check if profile exists
-    const existingProfile = await getPlayerProfile(userId);
+    const existingProfile = await getPlayerProfile(userId, stateId);
 
     const profileToSave = {
       ...profileData,
@@ -93,14 +131,16 @@ export const savePlayerProfile = async (
     if (existingProfile) {
       // Update existing profile
       const profileQuery = query(
-        collection(db, "playerProfiles"),
+        getStateCollection(COLLECTION_NAMES.PLAYERS, stateId),
         where("userId", "==", userId)
       );
       const querySnapshot = await getDocs(profileQuery);
 
       if (!querySnapshot.empty) {
-        const profileRef = doc(db, "playerProfiles", querySnapshot.docs[0].id);
-        await updateDoc(profileRef, profileToSave);
+        const profileRef = getStateDocument(COLLECTION_NAMES.PLAYERS, stateId, querySnapshot.docs[0].id);
+        // Remove undefined values before updating (Firestore doesn't allow undefined)
+        const cleanedProfileToSave = removeUndefined(profileToSave);
+        await updateDoc(profileRef, cleanedProfileToSave);
 
         return {
           ...existingProfile,
@@ -112,9 +152,11 @@ export const savePlayerProfile = async (
     }
 
     // Create new profile
-    const newProfileRef = doc(collection(db, "playerProfiles"));
+    const newProfileRef = getStateDocument(COLLECTION_NAMES.PLAYERS, stateId);
+    // Remove undefined values before creating (Firestore doesn't allow undefined)
+    const cleanedProfileToSave = removeUndefined(profileToSave);
     await setDoc(newProfileRef, {
-      ...profileToSave,
+      ...cleanedProfileToSave,
       id: newProfileRef.id,
     });
 
@@ -149,13 +191,17 @@ export const savePlayerProfile = async (
 
 /**
  * Add achievement to player profile
+ * @param userId - The user ID
+ * @param achievement - Achievement data
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const addAchievement = async (
   userId: string,
-  achievement: Omit<Achievement, "id">
+  achievement: Omit<Achievement, "id">,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -169,7 +215,7 @@ export const addAchievement = async (
 
     await savePlayerProfile(userId, {
       achievements: updatedAchievements,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error adding achievement:", error);
     throw error;
@@ -178,14 +224,19 @@ export const addAchievement = async (
 
 /**
  * Update achievement in player profile
+ * @param userId - The user ID
+ * @param achievementId - The achievement ID
+ * @param achievementData - Achievement data to update
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateAchievement = async (
   userId: string,
   achievementId: string,
-  achievementData: Partial<Achievement>
+  achievementData: Partial<Achievement>,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -196,7 +247,7 @@ export const updateAchievement = async (
 
     await savePlayerProfile(userId, {
       achievements: updatedAchievements,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error updating achievement:", error);
     throw error;
@@ -205,13 +256,17 @@ export const updateAchievement = async (
 
 /**
  * Delete achievement from player profile
+ * @param userId - The user ID
+ * @param achievementId - The achievement ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const deleteAchievement = async (
   userId: string,
-  achievementId: string
+  achievementId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -222,7 +277,7 @@ export const deleteAchievement = async (
 
     await savePlayerProfile(userId, {
       achievements: updatedAchievements,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error deleting achievement:", error);
     throw error;
@@ -231,13 +286,17 @@ export const deleteAchievement = async (
 
 /**
  * Add video to player profile
+ * @param userId - The user ID
+ * @param videoUrl - Video URL to add
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const addVideoToProfile = async (
   userId: string,
-  videoUrl: string
+  videoUrl: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -246,7 +305,7 @@ export const addVideoToProfile = async (
 
     await savePlayerProfile(userId, {
       highlightVideos: updatedVideos,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error adding video:", error);
     throw error;
@@ -255,13 +314,17 @@ export const addVideoToProfile = async (
 
 /**
  * Remove video from player profile
+ * @param userId - The user ID
+ * @param videoUrl - Video URL to remove
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const removeVideoFromProfile = async (
   userId: string,
-  videoUrl: string
+  videoUrl: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -272,7 +335,7 @@ export const removeVideoFromProfile = async (
 
     await savePlayerProfile(userId, {
       highlightVideos: updatedVideos,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error removing video:", error);
     throw error;
@@ -281,13 +344,17 @@ export const removeVideoFromProfile = async (
 
 /**
  * Add image to player profile
+ * @param userId - The user ID
+ * @param imageUrl - Image URL to add
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const addImageToProfile = async (
   userId: string,
-  imageUrl: string
+  imageUrl: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -296,7 +363,7 @@ export const addImageToProfile = async (
 
     await savePlayerProfile(userId, {
       images: updatedImages,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error adding image:", error);
     throw error;
@@ -305,13 +372,17 @@ export const addImageToProfile = async (
 
 /**
  * Remove image from player profile
+ * @param userId - The user ID
+ * @param imageUrl - Image URL to remove
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const removeImageFromProfile = async (
   userId: string,
-  imageUrl: string
+  imageUrl: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       throw new Error("Player profile not found");
     }
@@ -320,7 +391,7 @@ export const removeImageFromProfile = async (
 
     await savePlayerProfile(userId, {
       images: updatedImages,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error removing image:", error);
     throw error;
@@ -329,17 +400,19 @@ export const removeImageFromProfile = async (
 
 /**
  * Increment profile views (for analytics)
+ * @param userId - The user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const incrementProfileViews = async (userId: string): Promise<void> => {
+export const incrementProfileViews = async (userId: string, stateId: string): Promise<void> => {
   try {
-    const profile = await getPlayerProfile(userId);
+    const profile = await getPlayerProfile(userId, stateId);
     if (!profile) {
       return; // Profile doesn't exist, skip
     }
 
     await savePlayerProfile(userId, {
       profileViews: (profile.profileViews || 0) + 1,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error incrementing profile views:", error);
     // Don't throw - this is just analytics
@@ -348,18 +421,22 @@ export const incrementProfileViews = async (userId: string): Promise<void> => {
 
 /**
  * Search player profiles (for scouts)
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param filters - Search filters
  */
-export const searchPlayerProfiles = async (filters: {
-  position?: string;
-  minAge?: number;
-  maxAge?: number;
-  state?: string;
-  city?: string;
-  minGoals?: number;
-  isPublic?: boolean;
-}): Promise<PlayerProfile[]> => {
+export const searchPlayerProfiles = async (
+  stateId: string,
+  filters: {
+    position?: string;
+    minAge?: number;
+    maxAge?: number;
+    city?: string;
+    minGoals?: number;
+    isPublic?: boolean;
+  }
+): Promise<PlayerProfile[]> => {
   try {
-    let profileQuery = query(collection(db, "playerProfiles"));
+    let profileQuery = query(getStateCollection(COLLECTION_NAMES.PLAYERS, stateId));
 
     // Apply filters
     if (filters.isPublic !== undefined) {
@@ -374,10 +451,6 @@ export const searchPlayerProfiles = async (filters: {
         where("position", "==", filters.position)
       );
     }
-    if (filters.state) {
-      // Note: This requires a compound index in Firestore
-      profileQuery = query(profileQuery, where("state", "==", filters.state));
-    }
 
     const querySnapshot = await getDocs(profileQuery);
     const profiles: PlayerProfile[] = [];
@@ -391,6 +464,8 @@ export const searchPlayerProfiles = async (filters: {
         createdAt: data.createdAt?.toDate?.() || data.createdAt,
       } as PlayerProfile);
     });
+
+    console.log(`[searchPlayerProfiles] Found ${profiles.length} profiles in state ${stateId} with isPublic=${filters.isPublic}`);
 
     // Apply client-side filters (age, goals, etc.)
     // Note: Firestore has limitations on complex queries, so we filter in-memory for some criteria

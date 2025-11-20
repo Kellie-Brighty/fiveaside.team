@@ -2,31 +2,39 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getUserOrders, getOrder } from "../services/productService";
 import type { Order } from "../types";
 
 const OrdersPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const { orderId } = useParams<{ orderId?: string }>();
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentState) {
       if (orderId) {
         loadSingleOrder(orderId);
       } else {
         loadOrders();
       }
     }
-  }, [currentUser, orderId]);
+  }, [currentUser, orderId, currentState?.id]);
 
   const loadOrders = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       if (currentUser?.id) {
-        const userOrders = await getUserOrders(currentUser.id);
+        const userOrders = await getUserOrders(currentUser.id, currentState.id);
         setOrders(userOrders);
       }
     } catch (error) {
@@ -38,9 +46,15 @@ const OrdersPage: React.FC = () => {
   };
 
   const loadSingleOrder = async (id: string) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      const order = await getOrder(id);
+      const order = await getOrder(id, currentState.id);
       if (order) {
         setSelectedOrder(order);
       } else {

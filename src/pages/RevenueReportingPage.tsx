@@ -1,12 +1,14 @@
 // Phase 4.2: Revenue Reporting Dashboard for Ministry/FA Officials
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllClubs } from "../services/clubService";
 import { hasPermission } from "../utils/permissions";
 import type { Club } from "../types";
 
 const RevenueReportingPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [loading, setLoading] = useState(true);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -31,11 +33,17 @@ const RevenueReportingPage: React.FC = () => {
         return;
       }
 
+      if (!currentState) {
+        setError("Current state not available. Cannot load revenue data.");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
-        const allClubs = await getAllClubs();
+        const allClubs = await getAllClubs(currentState.id);
         setClubs(allClubs);
       } catch (error) {
         console.error("Error loading revenue data:", error);
@@ -48,7 +56,7 @@ const RevenueReportingPage: React.FC = () => {
     if (!isAuthLoading) {
       loadData();
     }
-  }, [currentUser, isAuthLoading]);
+  }, [currentUser, isAuthLoading, filter, dateRange, currentState?.id]);
 
   // Calculate revenue statistics
   const calculateStats = () => {

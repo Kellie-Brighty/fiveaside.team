@@ -2,12 +2,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getClubsByManager } from "../services/clubService";
 import { hasPermission } from "../utils/permissions";
 import type { Club } from "../types";
 
 const MyClubsPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [clubs, setClubs] = useState<Club[]>([]);
@@ -16,6 +18,12 @@ const MyClubsPage: React.FC = () => {
   useEffect(() => {
     const loadClubs = async () => {
       if (!currentUser || isAuthLoading) return;
+
+      if (!currentState) {
+        setError("State not available");
+        setLoading(false);
+        return;
+      }
 
       // Check permissions
       const canManageClubs =
@@ -32,7 +40,7 @@ const MyClubsPage: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const managerClubs = await getClubsByManager(currentUser.id);
+        const managerClubs = await getClubsByManager(currentUser.id, currentState.id);
         setClubs(managerClubs);
       } catch (error) {
         console.error("Error loading clubs:", error);
@@ -45,7 +53,7 @@ const MyClubsPage: React.FC = () => {
     if (!isAuthLoading) {
       loadClubs();
     }
-  }, [currentUser, isAuthLoading]);
+  }, [currentUser, isAuthLoading, currentState?.id]);
 
   if (isAuthLoading || loading) {
     return (

@@ -1,6 +1,5 @@
 // Phase 4.3: Transfer Service for player transfer/registration workflow
 import {
-  collection,
   doc,
   getDoc,
   getDocs,
@@ -11,11 +10,11 @@ import {
   serverTimestamp,
   Timestamp,
   orderBy,
- 
 } from "firebase/firestore";
 import { db } from "../firebase";
-import type { TransferRequest,  User } from "../types";
-import { getClub,  addPlayerToRoster } from "./clubService";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
+import type { TransferRequest, User } from "../types";
+import { getClub, addPlayerToRoster } from "./clubService";
 
 /**
  * Helper to safely convert Firestore timestamp to Date
@@ -76,6 +75,7 @@ const removeUndefined = (obj: any): any => {
 export const createTransferRequest = async (
   playerId: string,
   clubId: string,
+  stateId: string,
   data?: {
     position?: string;
     jerseyNumber?: number;
@@ -84,7 +84,7 @@ export const createTransferRequest = async (
 ): Promise<TransferRequest> => {
   try {
     // Check if player is already in the club
-    const club = await getClub(clubId);
+    const club = await getClub(clubId, stateId);
     if (!club) {
       throw new Error("Club not found");
     }
@@ -96,13 +96,14 @@ export const createTransferRequest = async (
     // Check if there's already a pending request
     const existingRequest = await getTransferRequestByPlayerAndClub(
       playerId,
-      clubId
+      clubId,
+      stateId
     );
     if (existingRequest && existingRequest.status === "pending") {
       throw new Error("You already have a pending request for this club");
     }
 
-    const newRequestRef = doc(collection(db, "transferRequests"));
+    const newRequestRef = getStateDocument(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId);
 
     const request: TransferRequest = {
       id: newRequestRef.id,
@@ -131,10 +132,11 @@ export const createTransferRequest = async (
  * Get transfer request by ID
  */
 export const getTransferRequest = async (
-  requestId: string
+  requestId: string,
+  stateId: string
 ): Promise<TransferRequest | null> => {
   try {
-    const requestDoc = await getDoc(doc(db, "transferRequests", requestId));
+    const requestDoc = await getDoc(getStateDocument(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId, requestId));
 
     if (!requestDoc.exists()) {
       return null;
@@ -158,11 +160,12 @@ export const getTransferRequest = async (
  */
 export const getTransferRequestByPlayerAndClub = async (
   playerId: string,
-  clubId: string
+  clubId: string,
+  stateId: string
 ): Promise<TransferRequest | null> => {
   try {
     const requestsQuery = query(
-      collection(db, "transferRequests"),
+      getStateCollection(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId),
       where("playerId", "==", playerId),
       where("clubId", "==", clubId),
       orderBy("requestedAt", "desc")
@@ -173,10 +176,10 @@ export const getTransferRequestByPlayerAndClub = async (
       return null;
     }
 
-    const doc = querySnapshot.docs[0];
-    const data = doc.data();
+    const requestDoc = querySnapshot.docs[0];
+    const data = requestDoc.data();
     return {
-      id: doc.id,
+      id: requestDoc.id,
       ...data,
       requestedAt: toDate(data.requestedAt) || new Date(),
       reviewedAt: toDate(data.reviewedAt),
@@ -192,18 +195,19 @@ export const getTransferRequestByPlayerAndClub = async (
  */
 export const getTransferRequestsByClub = async (
   clubId: string,
+  stateId: string,
   status?: "pending" | "approved" | "rejected" | "cancelled"
 ): Promise<TransferRequest[]> => {
   try {
     let requestsQuery = query(
-      collection(db, "transferRequests"),
+      getStateCollection(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId),
       where("clubId", "==", clubId),
       orderBy("requestedAt", "desc")
     );
 
     if (status) {
       requestsQuery = query(
-        collection(db, "transferRequests"),
+        getStateCollection(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId),
         where("clubId", "==", clubId),
         where("status", "==", status),
         orderBy("requestedAt", "desc")
@@ -213,10 +217,10 @@ export const getTransferRequestsByClub = async (
     const querySnapshot = await getDocs(requestsQuery);
     const requests: TransferRequest[] = [];
 
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((requestDoc) => {
+      const data = requestDoc.data();
       requests.push({
-        id: doc.id,
+        id: requestDoc.id,
         ...data,
         requestedAt: toDate(data.requestedAt) || new Date(),
         reviewedAt: toDate(data.reviewedAt),
@@ -234,11 +238,12 @@ export const getTransferRequestsByClub = async (
  * Get all transfer requests by a player
  */
 export const getTransferRequestsByPlayer = async (
-  playerId: string
+  playerId: string,
+  stateId: string
 ): Promise<TransferRequest[]> => {
   try {
     const requestsQuery = query(
-      collection(db, "transferRequests"),
+      getStateCollection(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId),
       where("playerId", "==", playerId),
       orderBy("requestedAt", "desc")
     );
@@ -246,10 +251,10 @@ export const getTransferRequestsByPlayer = async (
     const querySnapshot = await getDocs(requestsQuery);
     const requests: TransferRequest[] = [];
 
-    querySnapshot.forEach((doc) => {
-      const data = doc.data();
+    querySnapshot.forEach((requestDoc) => {
+      const data = requestDoc.data();
       requests.push({
-        id: doc.id,
+        id: requestDoc.id,
         ...data,
         requestedAt: toDate(data.requestedAt) || new Date(),
         reviewedAt: toDate(data.reviewedAt),
@@ -269,13 +274,14 @@ export const getTransferRequestsByPlayer = async (
 export const approveTransferRequest = async (
   requestId: string,
   reviewerId: string,
+  stateId: string,
   rosterData: {
     position: string;
     jerseyNumber?: number;
   }
 ): Promise<void> => {
   try {
-    const request = await getTransferRequest(requestId);
+    const request = await getTransferRequest(requestId, stateId);
     if (!request) {
       throw new Error("Transfer request not found");
     }
@@ -284,7 +290,7 @@ export const approveTransferRequest = async (
       throw new Error("Request is not pending");
     }
 
-    // Fetch player data to get player name
+    // Fetch player data to get player name (users collection is global)
     const playerDoc = await getDoc(doc(db, "users", request.playerId));
     if (!playerDoc.exists()) {
       throw new Error("Player not found");
@@ -298,7 +304,7 @@ export const approveTransferRequest = async (
       playerName,
       position: rosterData.position,
       jerseyNumber: rosterData.jerseyNumber,
-    });
+    }, stateId);
 
     // Update request status (remove undefined values)
     const updateData = removeUndefined({
@@ -309,7 +315,7 @@ export const approveTransferRequest = async (
       jerseyNumber: rosterData.jerseyNumber,
     });
 
-    await updateDoc(doc(db, "transferRequests", requestId), updateData);
+    await updateDoc(getStateDocument(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId, requestId), updateData);
   } catch (error) {
     console.error("Error approving transfer request:", error);
     throw error;
@@ -322,10 +328,11 @@ export const approveTransferRequest = async (
 export const rejectTransferRequest = async (
   requestId: string,
   reviewerId: string,
+  stateId: string,
   reason?: string
 ): Promise<void> => {
   try {
-    const request = await getTransferRequest(requestId);
+    const request = await getTransferRequest(requestId, stateId);
     if (!request) {
       throw new Error("Transfer request not found");
     }
@@ -342,7 +349,7 @@ export const rejectTransferRequest = async (
       rejectionReason: reason,
     });
 
-    await updateDoc(doc(db, "transferRequests", requestId), updateData);
+    await updateDoc(getStateDocument(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId, requestId), updateData);
   } catch (error) {
     console.error("Error rejecting transfer request:", error);
     throw error;
@@ -353,10 +360,11 @@ export const rejectTransferRequest = async (
  * Cancel transfer request (by player)
  */
 export const cancelTransferRequest = async (
-  requestId: string
+  requestId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const request = await getTransferRequest(requestId);
+    const request = await getTransferRequest(requestId, stateId);
     if (!request) {
       throw new Error("Transfer request not found");
     }
@@ -365,7 +373,7 @@ export const cancelTransferRequest = async (
       throw new Error("Only pending requests can be cancelled");
     }
 
-    await updateDoc(doc(db, "transferRequests", requestId), {
+    await updateDoc(getStateDocument(COLLECTION_NAMES.TRANSFER_REQUESTS, stateId, requestId), {
       status: "cancelled",
       reviewedAt: serverTimestamp(),
     });

@@ -1,7 +1,5 @@
 // Phase 4: Club Service for Firestore operations
 import {
-  collection,
-  doc,
   getDoc,
   getDocs,
   setDoc,
@@ -12,7 +10,7 @@ import {
   Timestamp,
   orderBy,
 } from "firebase/firestore";
-import { db } from "../firebase";
+import { getStateCollection, getStateDocument, COLLECTION_NAMES } from "../utils/stateService";
 import type { Club } from "../types";
 
 /**
@@ -56,10 +54,12 @@ const removeUndefined = (obj: any): any => {
 
 /**
  * Get club by ID
+ * @param clubId - The club ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getClub = async (clubId: string): Promise<Club | null> => {
+export const getClub = async (clubId: string, stateId: string): Promise<Club | null> => {
   try {
-    const clubDoc = await getDoc(doc(db, "clubs", clubId));
+    const clubDoc = await getDoc(getStateDocument(COLLECTION_NAMES.CLUBS, stateId, clubId));
 
     if (!clubDoc.exists()) {
       return null;
@@ -132,11 +132,13 @@ export const getClub = async (clubId: string): Promise<Club | null> => {
 
 /**
  * Get clubs by manager ID
+ * @param managerId - The manager's user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const getClubsByManager = async (managerId: string): Promise<Club[]> => {
+export const getClubsByManager = async (managerId: string, stateId: string): Promise<Club[]> => {
   try {
     const clubsQuery = query(
-      collection(db, "clubs"),
+      getStateCollection(COLLECTION_NAMES.CLUBS, stateId),
       where("managerId", "==", managerId),
       orderBy("createdAt", "desc")
     );
@@ -189,15 +191,19 @@ export const getClubsByManager = async (managerId: string): Promise<Club[]> => {
 
 /**
  * Get all clubs (with optional filters)
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param filters - Optional filters for clubs
  */
-export const getAllClubs = async (filters?: {
-  isLegitimate?: boolean;
-  state?: string;
-  city?: string;
-  verified?: boolean;
-}): Promise<Club[]> => {
+export const getAllClubs = async (
+  stateId: string,
+  filters?: {
+    isLegitimate?: boolean;
+    city?: string;
+    verified?: boolean;
+  }
+): Promise<Club[]> => {
   try {
-    let clubsQuery = query(collection(db, "clubs"), orderBy("createdAt", "desc"));
+    let clubsQuery = query(getStateCollection(COLLECTION_NAMES.CLUBS, stateId), orderBy("createdAt", "desc"));
 
     // Apply filters
     if (filters?.isLegitimate !== undefined) {
@@ -223,9 +229,6 @@ export const getAllClubs = async (filters?: {
       const data = doc.data();
       
       // Client-side filters
-      if (filters?.state && data.location?.state !== filters.state) {
-        return;
-      }
       if (filters?.city && data.location?.city !== filters.city) {
         return;
       }
@@ -267,12 +270,15 @@ export const getAllClubs = async (filters?: {
 
 /**
  * Create a new club
+ * @param clubData - Club data (without id, timestamps, etc.)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const createClub = async (
-  clubData: Omit<Club, "id" | "createdAt" | "updatedAt" | "playerIds" | "roster" | "isLegitimate" | "legitimacyFeeStatus">
+  clubData: Omit<Club, "id" | "createdAt" | "updatedAt" | "playerIds" | "roster" | "isLegitimate" | "legitimacyFeeStatus">,
+  stateId: string
 ): Promise<Club> => {
   try {
-    const newClubRef = doc(collection(db, "clubs"));
+    const newClubRef = getStateDocument(COLLECTION_NAMES.CLUBS, stateId);
 
     const clubToCreate = {
       ...clubData,
@@ -312,13 +318,17 @@ export const createClub = async (
 
 /**
  * Update club information
+ * @param clubId - The club ID
+ * @param updates - Partial club data to update
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updateClub = async (
   clubId: string,
-  updates: Partial<Club>
+  updates: Partial<Club>,
+  stateId: string
 ): Promise<void> => {
   try {
-    const clubRef = doc(db, "clubs", clubId);
+    const clubRef = getStateDocument(COLLECTION_NAMES.CLUBS, stateId, clubId);
 
     // Convert Date objects to Firestore timestamps if needed
     const updateData: any = { ...updates, updatedAt: serverTimestamp() };
@@ -344,14 +354,15 @@ export const updateClub = async (
 /**
  * Generate a unique club registration number
  * Format: CLB-YYYY-XXX (e.g., CLB-2024-001)
+ * @param stateId - The state ID (e.g., "kaduna")
  */
-export const generateClubRegistrationNumber = async (): Promise<string> => {
+export const generateClubRegistrationNumber = async (stateId: string): Promise<string> => {
   try {
     const currentYear = new Date().getFullYear();
     const prefix = `CLB-${currentYear}-`;
     
     // Get all existing clubs to find the next sequence number
-    const allClubs = await getAllClubs();
+    const allClubs = await getAllClubs(stateId);
     
     // Filter clubs with registration numbers for current year
     const currentYearClubs = allClubs.filter((club) => {
@@ -387,16 +398,20 @@ export const generateClubRegistrationNumber = async (): Promise<string> => {
 
 /**
  * Verify club (assign registration number) - for FA officials
+ * @param clubId - The club ID
+ * @param registrationNumber - The registration number to assign
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const verifyClub = async (
   clubId: string,
-  registrationNumber: string
+  registrationNumber: string,
+  stateId: string
 ): Promise<void> => {
   try {
     await updateClub(clubId, {
       registrationNumber,
       // Additional verification fields can be added here
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error verifying club:", error);
     throw error;
@@ -405,6 +420,9 @@ export const verifyClub = async (
 
 /**
  * Record legitimacy fee payment
+ * @param clubId - The club ID
+ * @param paymentData - Payment information
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const recordLegitimacyPayment = async (
   clubId: string,
@@ -412,10 +430,11 @@ export const recordLegitimacyPayment = async (
     amount: number;
     transactionRef: string;
     validUntil: Date;
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   try {
-    const club = await getClub(clubId);
+    const club = await getClub(clubId, stateId);
     if (!club) {
       throw new Error("Club not found");
     }
@@ -437,7 +456,7 @@ export const recordLegitimacyPayment = async (
       legitimacyFeePaidUntil: paymentData.validUntil,
       lastLegitimacyPaymentDate: new Date(),
       legitimacyPaymentHistory: updatedHistory,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error recording legitimacy payment:", error);
     throw error;
@@ -446,6 +465,9 @@ export const recordLegitimacyPayment = async (
 
 /**
  * Add player to club roster
+ * @param clubId - The club ID
+ * @param playerData - Player information
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const addPlayerToRoster = async (
   clubId: string,
@@ -454,10 +476,11 @@ export const addPlayerToRoster = async (
     playerName: string;
     position: string;
     jerseyNumber?: number;
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   try {
-    const club = await getClub(clubId);
+    const club = await getClub(clubId, stateId);
     if (!club) {
       throw new Error("Club not found");
     }
@@ -479,7 +502,7 @@ export const addPlayerToRoster = async (
     await updateClub(clubId, {
       roster: updatedRoster,
       playerIds: updatedPlayerIds,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error adding player to roster:", error);
     throw error;
@@ -488,13 +511,17 @@ export const addPlayerToRoster = async (
 
 /**
  * Remove player from club roster
+ * @param clubId - The club ID
+ * @param userId - The player's user ID
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const removePlayerFromRoster = async (
   clubId: string,
-  userId: string
+  userId: string,
+  stateId: string
 ): Promise<void> => {
   try {
-    const club = await getClub(clubId);
+    const club = await getClub(clubId, stateId);
     if (!club) {
       throw new Error("Club not found");
     }
@@ -507,7 +534,7 @@ export const removePlayerFromRoster = async (
     await updateClub(clubId, {
       roster: updatedRoster,
       playerIds: updatedPlayerIds,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error removing player from roster:", error);
     throw error;
@@ -516,6 +543,10 @@ export const removePlayerFromRoster = async (
 
 /**
  * Update player in roster (e.g., position, jersey number)
+ * @param clubId - The club ID
+ * @param userId - The player's user ID
+ * @param updates - Player updates
+ * @param stateId - The state ID (e.g., "kaduna")
  */
 export const updatePlayerInRoster = async (
   clubId: string,
@@ -524,10 +555,11 @@ export const updatePlayerInRoster = async (
     position?: string;
     jerseyNumber?: number;
     playerName?: string;
-  }
+  },
+  stateId: string
 ): Promise<void> => {
   try {
-    const club = await getClub(clubId);
+    const club = await getClub(clubId, stateId);
     if (!club) {
       throw new Error("Club not found");
     }
@@ -540,7 +572,7 @@ export const updatePlayerInRoster = async (
 
     await updateClub(clubId, {
       roster: updatedRoster,
-    });
+    }, stateId);
   } catch (error) {
     console.error("Error updating player in roster:", error);
     throw error;
@@ -549,12 +581,15 @@ export const updatePlayerInRoster = async (
 
 /**
  * Get clubs that need legitimacy fee renewal (expired or expiring soon)
+ * @param stateId - The state ID (e.g., "kaduna")
+ * @param daysBeforeExpiry - Number of days before expiry to warn (default: 30)
  */
 export const getClubsNeedingRenewal = async (
+  stateId: string,
   daysBeforeExpiry?: number
 ): Promise<Club[]> => {
   try {
-    const allClubs = await getAllClubs({ isLegitimate: true });
+    const allClubs = await getAllClubs(stateId, { isLegitimate: true });
     const now = new Date();
     const thresholdDate = new Date();
     thresholdDate.setDate(now.getDate() + (daysBeforeExpiry || 30));

@@ -44,6 +44,7 @@ import PlayerMessagesPage from "./pages/PlayerMessagesPage"; // Phase 11
 import PlayerRecruitmentPage from "./pages/PlayerRecruitmentPage"; // Phase 11
 import AuthProvider, { useAuth } from "./contexts/AuthContext";
 import { CartProvider } from "./contexts/CartContext"; // Phase 8
+import { StateProvider } from "./contexts/StateContext"; // Multi-state support
 import RequireAuth from "./components/RequireAuth";
 import ScrollToTop from "./components/ScrollToTop";
 import LoadingScreen from "./components/LoadingScreen";
@@ -176,11 +177,13 @@ const AppContent: React.FC = () => {
 const App: React.FC = () => {
   return (
     <Router>
-      <AuthProvider>
-        <CartProvider>
-          <AppContent />
-        </CartProvider>
-      </AuthProvider>
+      <StateProvider>
+        <AuthProvider>
+          <CartProvider>
+            <AppContent />
+          </CartProvider>
+        </AuthProvider>
+      </StateProvider>
     </Router>
   );
 };

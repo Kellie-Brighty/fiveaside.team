@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { hasPermission } from "../utils/permissions";
 import { getPlayerProfile } from "../services/playerProfileService";
 import { doc, getDoc } from "firebase/firestore";
@@ -10,6 +11,7 @@ import type { PlayerProfile, User } from "../types";
 
 const PlayerComparisonPage: React.FC = () => {
   const { currentUser, isAuthenticated, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [players, setPlayers] = useState<
@@ -20,7 +22,7 @@ const PlayerComparisonPage: React.FC = () => {
   const [_playerIds, setPlayerIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated && currentUser) {
+    if (!isLoading && isAuthenticated && currentUser && currentState) {
       const canView = hasPermission(currentUser.role, "scout_players");
       if (!canView) {
         setError("You don't have permission to compare players");
@@ -35,9 +37,15 @@ const PlayerComparisonPage: React.FC = () => {
     } else if (!isLoading && !isAuthenticated) {
       setError("Please login to compare players");
     }
-  }, [currentUser, isAuthenticated, isLoading, searchParams]);
+  }, [currentUser, isAuthenticated, isLoading, searchParams, currentState?.id]);
 
   const loadPlayers = async (ids: string[]) => {
+    if (!currentState) {
+      setError("State not available");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -47,7 +55,7 @@ const PlayerComparisonPage: React.FC = () => {
       for (const playerId of ids) {
         try {
           // Get player profile
-          const profile = await getPlayerProfile(playerId);
+          const profile = await getPlayerProfile(playerId, currentState.id);
           if (!profile) continue;
 
           // Get user data

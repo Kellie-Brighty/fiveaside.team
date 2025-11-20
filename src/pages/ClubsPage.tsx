@@ -2,11 +2,13 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getAllClubs } from "../services/clubService";
 import type { Club } from "../types";
 
 const ClubsPage: React.FC = () => {
   const { isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [loading, setLoading] = useState(true);
   const [clubs, setClubs] = useState<Club[]>([]);
   const [filteredClubs, setFilteredClubs] = useState<Club[]>([]);
@@ -21,15 +23,20 @@ const ClubsPage: React.FC = () => {
 
   useEffect(() => {
     const loadClubs = async () => {
+      if (!currentState) {
+        setError("State not available");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
 
         // Load all clubs (service will handle filtering)
-        const allClubs = await getAllClubs({
+        const allClubs = await getAllClubs(currentState.id, {
           verified: verifiedFilter === "verified" ? true : verifiedFilter === "unverified" ? false : undefined,
           isLegitimate: legitimateFilter === "legitimate" ? true : legitimateFilter === "unpaid" ? false : undefined,
-          state: stateFilter || undefined,
           city: cityFilter || undefined,
         });
 
@@ -46,7 +53,7 @@ const ClubsPage: React.FC = () => {
     if (!isLoading) {
       loadClubs();
     }
-  }, [isLoading, stateFilter, cityFilter, verifiedFilter, legitimateFilter]);
+  }, [isLoading, stateFilter, cityFilter, verifiedFilter, legitimateFilter, currentState?.id]);
 
   // Apply search query filter
   useEffect(() => {

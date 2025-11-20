@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getServiceProvider, incrementProviderViews } from "../services/serviceProviderService";
 import { getProviderBookings } from "../services/serviceProviderService";
 import type { ServiceProvider, ServiceBooking } from "../types";
@@ -10,6 +11,7 @@ const ServiceProviderProfilePage: React.FC = () => {
   const { providerId } = useParams<{ providerId: string }>();
   const navigate = useNavigate();
   const { currentUser, isAuthenticated } = useAuth();
+  const { currentState } = useStateContext();
 
   const [provider, setProvider] = useState<ServiceProvider | null>(null);
   const [loading, setLoading] = useState(true);
@@ -17,16 +19,22 @@ const ServiceProviderProfilePage: React.FC = () => {
   const [_selectedService, setSelectedService] = useState<string | null>(null);
 
   useEffect(() => {
-    if (providerId) {
+    if (providerId && currentState) {
       loadProvider();
       loadBookings();
     }
-  }, [providerId]);
+  }, [providerId, currentState?.id]);
 
   const loadProvider = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      navigate("/service-providers");
+      return;
+    }
     try {
       setLoading(true);
-      const providerData = await getServiceProvider(providerId!);
+      const providerData = await getServiceProvider(providerId!, currentState.id);
       if (!providerData) {
         window.toast?.error("Service provider not found");
         navigate("/service-providers");
@@ -36,7 +44,7 @@ const ServiceProviderProfilePage: React.FC = () => {
 
       // Increment views
       try {
-        await incrementProviderViews(providerId!);
+        await incrementProviderViews(providerId!, currentState.id);
       } catch (error) {
         // Don't show error - this is just analytics
       }
@@ -50,9 +58,9 @@ const ServiceProviderProfilePage: React.FC = () => {
   };
 
   const loadBookings = async () => {
-    if (!providerId || !isAuthenticated) return;
+    if (!providerId || !isAuthenticated || !currentState) return;
     try {
-      const allBookings = await getProviderBookings(providerId);
+      const allBookings = await getProviderBookings(providerId, currentState.id);
       setBookings(allBookings);
     } catch (error) {
       console.error("Error loading bookings:", error);

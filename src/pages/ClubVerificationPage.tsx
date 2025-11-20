@@ -1,6 +1,7 @@
 // Phase 4.1: Club Verification Page (for FA officials)
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getAllClubs,
   verifyClub,
@@ -15,6 +16,7 @@ import type { Club, User } from "../types";
 
 const ClubVerificationPage: React.FC = () => {
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [loading, setLoading] = useState(true);
   const [clubs, setClubs] = useState<(Club & { manager?: User })[]>([]);
   const [filter, setFilter] = useState<"all" | "unverified" | "verified">("unverified");
@@ -27,6 +29,12 @@ const ClubVerificationPage: React.FC = () => {
   useEffect(() => {
     const loadClubs = async () => {
       if (!currentUser || isAuthLoading) return;
+
+      if (!currentState) {
+        setError("State not available");
+        setLoading(false);
+        return;
+      }
 
       // Check permissions
       const canVerify = hasPermission(currentUser.role, "register_clubs");
@@ -42,7 +50,7 @@ const ClubVerificationPage: React.FC = () => {
         setError(null);
 
         // Load all clubs
-        const allClubs = await getAllClubs();
+        const allClubs = await getAllClubs(currentState.id);
 
         // Load manager data for each club
         const clubsWithManagers = await Promise.all(
@@ -76,20 +84,24 @@ const ClubVerificationPage: React.FC = () => {
     if (!isAuthLoading) {
       loadClubs();
     }
-  }, [currentUser, isAuthLoading, filter]);
+  }, [currentUser, isAuthLoading, filter, currentState?.id]);
 
   const handleVerifyClub = async () => {
-    if (!selectedClub || !registrationNumber.trim()) {
-      window.toast?.error("Registration number is required");
+    if (!selectedClub || !registrationNumber.trim() || !currentState) {
+      if (!currentState) {
+        window.toast?.error("State not available");
+      } else {
+        window.toast?.error("Registration number is required");
+      }
       return;
     }
 
     try {
       setVerifyingClubId(selectedClub.id);
-      await verifyClub(selectedClub.id, registrationNumber.trim());
+      await verifyClub(selectedClub.id, registrationNumber.trim(), currentState.id);
 
       // Reload clubs
-      const allClubs = await getAllClubs();
+      const allClubs = await getAllClubs(currentState.id);
       const clubsWithManagers = await Promise.all(
         allClubs.map(async (club) => {
           try {
@@ -124,10 +136,15 @@ const ClubVerificationPage: React.FC = () => {
   };
 
   const openVerificationModal = async (club: Club) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
+
     setSelectedClub(club);
     try {
       // Generate registration number automatically
-      const generatedNumber = await generateClubRegistrationNumber();
+      const generatedNumber = await generateClubRegistrationNumber(currentState.id);
       setRegistrationNumber(generatedNumber);
     } catch (error) {
       console.error("Error generating registration number:", error);

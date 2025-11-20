@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getProviderBookings,
   getServiceBooking,
@@ -13,6 +14,7 @@ import type { ServiceBooking, ServiceProvider, Service } from "../types";
 
 const ProviderBookingsPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const { bookingId } = useParams<{ bookingId?: string }>();
   const navigate = useNavigate();
 
@@ -27,7 +29,7 @@ const ProviderBookingsPage: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<ServiceBooking["status"] | "all">("all");
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     loadProvider();
     if (bookingId) {
@@ -35,12 +37,12 @@ const ProviderBookingsPage: React.FC = () => {
     } else {
       loadBookings();
     }
-  }, [currentUser, bookingId, filterStatus]);
+  }, [currentUser, bookingId, filterStatus, currentState?.id]);
 
   const loadProvider = async () => {
-    if (!currentUser?.id) return;
+    if (!currentUser?.id || !currentState) return;
     try {
-      const providerData = await getServiceProviderByUserId(currentUser.id);
+      const providerData = await getServiceProviderByUserId(currentUser.id, currentState.id);
       if (providerData) {
         setProvider(providerData);
       }
@@ -50,11 +52,12 @@ const ProviderBookingsPage: React.FC = () => {
   };
 
   const loadBookings = async () => {
-    if (!provider) return;
+    if (!provider || !currentState) return;
     try {
       setLoading(true);
       const providerBookings = await getProviderBookings(
         provider.id,
+        currentState.id,
         filterStatus !== "all" ? filterStatus : undefined
       );
       setBookings(providerBookings);
@@ -67,9 +70,14 @@ const ProviderBookingsPage: React.FC = () => {
   };
 
   const loadSingleBooking = async (id: string) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const booking = await getServiceBooking(id);
+      const booking = await getServiceBooking(id, currentState.id);
       if (booking) {
         // Verify this booking belongs to the provider
         if (booking.serviceProviderId !== provider?.id) {
@@ -79,7 +87,7 @@ const ProviderBookingsPage: React.FC = () => {
         }
         setSelectedBooking(booking);
         // Load service
-        const providerData = await getServiceProvider(booking.serviceProviderId);
+        const providerData = await getServiceProvider(booking.serviceProviderId, currentState.id);
         if (providerData) {
           const serviceData = providerData.services?.find((s) => s.id === booking.serviceId);
           if (serviceData) {
@@ -110,18 +118,18 @@ const ProviderBookingsPage: React.FC = () => {
   }, [provider]);
 
   const handleUpdateStatus = async () => {
-    if (!selectedBooking) return;
+    if (!selectedBooking || !currentState) return;
 
     try {
       setUpdatingStatus(true);
-      await updateServiceBookingStatus(selectedBooking.id, selectedStatus);
+      await updateServiceBookingStatus(selectedBooking.id, selectedStatus, currentState.id);
       window.toast?.success("Booking status updated successfully!");
       setShowStatusModal(false);
       await loadBookings();
-
+      
       // Reload selected booking if it's the same one
       if (selectedBooking) {
-        const updatedBooking = await getServiceBooking(selectedBooking.id);
+        const updatedBooking = await getServiceBooking(selectedBooking.id, currentState.id);
         if (updatedBooking) {
           setSelectedBooking(updatedBooking);
         }

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getServiceProviderByUserId,
   updateServiceProvider,
@@ -14,6 +15,7 @@ import LoadingButton from "../components/LoadingButton";
 
 const ServiceProviderDashboardPage: React.FC = () => {
   const { currentUser, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [provider, setProvider] = useState<ServiceProvider | null>(null);
@@ -50,17 +52,17 @@ const ServiceProviderDashboardPage: React.FC = () => {
   const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
   useEffect(() => {
-    if (!isLoading && currentUser) {
+    if (!isLoading && currentUser && currentState) {
       loadProvider();
     }
-  }, [currentUser, isLoading]);
+  }, [currentUser, isLoading, currentState?.id]);
 
   const loadProvider = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
       setLoading(true);
-      const providerData = await getServiceProviderByUserId(currentUser.id);
+      const providerData = await getServiceProviderByUserId(currentUser.id, currentState.id);
 
       if (!providerData) {
         window.toast?.info("You don't have a service provider profile yet");
@@ -119,7 +121,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!provider) return;
+    if (!provider || !currentState) return;
 
     try {
       setSubmitting(true);
@@ -144,7 +146,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
           : undefined,
       };
 
-      await updateServiceProvider(provider.id, updates);
+      await updateServiceProvider(provider.id, updates, currentState.id);
       window.toast?.success("Profile updated successfully!");
       await loadProvider();
     } catch (error) {
@@ -157,7 +159,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
 
   const handleAddService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!provider) return;
+    if (!provider || !currentState) return;
 
     if (!serviceForm.name.trim() || !serviceForm.price) {
       window.toast?.error("Service name and price are required");
@@ -174,7 +176,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
         serviceType: serviceForm.serviceType,
       };
 
-      await addServiceToProvider(provider.id, serviceData);
+      await addServiceToProvider(provider.id, serviceData, currentState.id);
       window.toast?.success("Service added successfully!");
       setServiceForm({
         name: "",
@@ -207,7 +209,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
 
   const handleUpdateService = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!provider || !editingService) return;
+    if (!provider || !editingService || !currentState) return;
 
     try {
       setSubmitting(true);
@@ -219,7 +221,7 @@ const ServiceProviderDashboardPage: React.FC = () => {
         serviceType: serviceForm.serviceType,
       };
 
-      await updateServiceForProvider(provider.id, editingService.id, updates);
+      await updateServiceForProvider(provider.id, editingService.id, updates, currentState.id);
       window.toast?.success("Service updated successfully!");
       setEditingService(null);
       setServiceForm({
@@ -240,13 +242,13 @@ const ServiceProviderDashboardPage: React.FC = () => {
   };
 
   const handleDeleteService = async (serviceId: string) => {
-    if (!provider) return;
+    if (!provider || !currentState) return;
     if (!window.confirm("Are you sure you want to delete this service?")) {
       return;
     }
 
     try {
-      await removeServiceFromProvider(provider.id, serviceId);
+      await removeServiceFromProvider(provider.id, serviceId, currentState.id);
       window.toast?.success("Service deleted successfully!");
       await loadProvider();
     } catch (error) {

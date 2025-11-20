@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../firebase";
+import { useStateContext } from "../contexts/StateContext";
 import { getPlayerProfile, incrementProfileViews } from "../services/playerProfileService";
 import {
   addToWatchlist,
@@ -24,6 +25,7 @@ const PlayerProfileViewPage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [playerProfile, setPlayerProfile] = useState<PlayerProfile | null>(null);
@@ -55,6 +57,12 @@ const PlayerProfileViewPage: React.FC = () => {
         return;
       }
 
+      if (!currentState) {
+        setError("State not available");
+        setLoading(false);
+        return;
+      }
+
       try {
         setLoading(true);
         setError(null);
@@ -78,7 +86,7 @@ const PlayerProfileViewPage: React.FC = () => {
         }
 
         // Load player profile
-        const profile = await getPlayerProfile(userId);
+        const profile = await getPlayerProfile(userId, currentState.id);
         if (!profile) {
           setError("Player profile not found");
           setLoading(false);
@@ -129,8 +137,8 @@ const PlayerProfileViewPage: React.FC = () => {
         setPlayerProfile(profile);
 
         // Increment profile views (analytics) - only if not viewing own profile
-        if (!isOwnProfile) {
-          incrementProfileViews(userId);
+        if (!isOwnProfile && currentState) {
+          incrementProfileViews(userId, currentState.id);
         }
 
         // Phase 11: Load watchlist count for player (if profile is public)
@@ -151,17 +159,17 @@ const PlayerProfileViewPage: React.FC = () => {
     };
 
     loadProfile();
-  }, [userId, currentUser]);
+  }, [userId, currentUser, currentState?.id]);
 
   // Phase 11: Check watchlist status and load notes for scouts
   useEffect(() => {
     const loadScoutData = async () => {
-      if (currentUser && userId && currentUser.role === "scout" && currentUser.id !== userId) {
+      if (currentUser && userId && currentState && currentUser.role === "scout" && currentUser.id !== userId) {
         try {
           setCheckingWatchlist(true);
           const [inList, note] = await Promise.all([
             isInWatchlist(currentUser.id, userId),
-            getPlayerNote(currentUser.id, userId),
+            getPlayerNote(currentUser.id, userId, currentState.id),
           ]);
           setInWatchlist(inList);
           if (note) {
@@ -175,18 +183,18 @@ const PlayerProfileViewPage: React.FC = () => {
       }
     };
 
-    if (currentUser && userId && playerProfile) {
+    if (currentUser && userId && playerProfile && currentState) {
       loadScoutData();
     }
-  }, [currentUser, userId, playerProfile]);
+  }, [currentUser, userId, playerProfile, currentState?.id]);
 
   // Phase 11: Save player note
   const handleSaveNote = async () => {
-    if (!currentUser || !userId || currentUser.role !== "scout") return;
+    if (!currentUser || !userId || !currentState || currentUser.role !== "scout") return;
 
     try {
       setLoadingNote(true);
-      await savePlayerNote(currentUser.id, userId, playerNote.trim());
+      await savePlayerNote(currentUser.id, userId, playerNote.trim(), currentState.id);
       setShowNotesModal(false);
       if (window.toast) {
         window.toast.success("Note saved successfully");
@@ -842,9 +850,13 @@ const PlayerProfileViewPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-2 mt-6">
               <button
                 onClick={async () => {
-                  if (!messageSubject || !messageText) {
+                  if (!messageSubject || !messageText || !currentState) {
                     if (window.toast) {
-                      window.toast.error("Please fill in all fields");
+                      if (!currentState) {
+                        window.toast.error("State not available");
+                      } else {
+                        window.toast.error("Please fill in all fields");
+                      }
                     }
                     return;
                   }
@@ -855,6 +867,7 @@ const PlayerProfileViewPage: React.FC = () => {
                       userId,
                       messageSubject,
                       messageText,
+                      currentState.id,
                       messageType
                     );
                     setShowMessageModal(false);
@@ -935,14 +948,15 @@ const PlayerProfileViewPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row gap-2 mt-6">
               <button
                 onClick={async () => {
-                  if (!currentUser || !userId) return;
+                  if (!currentUser || !userId || !currentState) return;
                   try {
                     setSavingRecruitment(true);
                     await upsertRecruitmentRecord(
                       currentUser.id,
                       userId,
                       recruitmentStage,
-                      recruitmentNotes
+                      recruitmentNotes,
+                      currentState.id
                     );
                     setShowRecruitmentModal(false);
                     setRecruitmentStage("interested");

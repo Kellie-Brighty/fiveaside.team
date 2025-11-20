@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getClub,
   updateClub,
@@ -26,6 +27,7 @@ import { db } from "../firebase";
 const ClubManagementPage: React.FC = () => {
   const { clubId } = useParams<{ clubId: string }>();
   const { currentUser, isLoading: isAuthLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [club, setClub] = useState<Club | null>(null);
@@ -64,13 +66,13 @@ const ClubManagementPage: React.FC = () => {
 
   useEffect(() => {
     const loadClub = async () => {
-      if (!clubId || !currentUser) return;
+      if (!clubId || !currentUser || !currentState) return;
 
       try {
         setLoading(true);
         setError(null);
 
-        const clubData = await getClub(clubId);
+        const clubData = await getClub(clubId, currentState.id);
 
         if (!clubData) {
           setError("Club not found");
@@ -107,14 +109,16 @@ const ClubManagementPage: React.FC = () => {
     if (!isAuthLoading && currentUser) {
       loadClub();
     }
-  }, [clubId, currentUser, isAuthLoading]);
+  }, [clubId, currentUser, isAuthLoading, currentState?.id]);
 
   // Phase 4.3: Load transfer requests
   const loadTransferRequests = async (clubId: string) => {
+    if (!currentState) return;
     try {
       setTransferRequestsLoading(true);
       const requests = await getTransferRequestsByClub(
         clubId,
+        currentState.id,
         transferRequestFilter === "pending" ? "pending" : undefined
       );
       
@@ -154,7 +158,7 @@ const ClubManagementPage: React.FC = () => {
       loadTransferRequests(clubId);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [transferRequestFilter, clubId]);
+  }, [transferRequestFilter, clubId, currentState?.id]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -175,7 +179,7 @@ const ClubManagementPage: React.FC = () => {
   };
 
   const handleSaveClubInfo = async () => {
-    if (!club || !currentUser) return;
+    if (!club || !currentUser || !currentState) return;
 
     try {
       setIsSaving(true);
@@ -205,10 +209,10 @@ const ClubManagementPage: React.FC = () => {
         contactEmail: contactEmail.trim() || undefined,
         contactPhone: contactPhone.trim() || undefined,
         website: website.trim() || undefined,
-      });
+      }, currentState.id);
 
       // Reload club data
-      const updatedClub = await getClub(club.id);
+      const updatedClub = await getClub(club.id, currentState.id);
       if (updatedClub) {
         setClub(updatedClub);
       }
@@ -227,17 +231,17 @@ const ClubManagementPage: React.FC = () => {
     amount: number,
     validUntil: Date
   ) => {
-    if (!club) return;
+    if (!club || !currentState) return;
 
     try {
       await recordLegitimacyPayment(club.id, {
         amount,
         transactionRef: reference,
         validUntil,
-      });
+      }, currentState.id);
 
       // Reload club data
-      const updatedClub = await getClub(club.id);
+      const updatedClub = await getClub(club.id, currentState.id);
       if (updatedClub) {
         setClub(updatedClub);
       }
@@ -251,8 +255,12 @@ const ClubManagementPage: React.FC = () => {
   };
 
   const handleAddPlayerToRoster = async () => {
-    if (!club || !selectedPlayerEmail || !selectedPlayerPosition) {
-      window.toast?.error("Please fill in all required fields");
+    if (!club || !currentState || !selectedPlayerEmail || !selectedPlayerPosition) {
+      if (!currentState) {
+        window.toast?.error("State not available");
+      } else {
+        window.toast?.error("Please fill in all required fields");
+      }
       return;
     }
 
@@ -285,10 +293,10 @@ const ClubManagementPage: React.FC = () => {
         playerName: userData.name,
         position: selectedPlayerPosition,
         jerseyNumber: selectedPlayerJerseyNumber ? parseInt(selectedPlayerJerseyNumber) : undefined,
-      });
+      }, currentState.id);
 
       // Reload club data
-      const updatedClub = await getClub(club.id);
+      const updatedClub = await getClub(club.id, currentState.id);
       if (updatedClub) {
         setClub(updatedClub);
       }
@@ -310,17 +318,17 @@ const ClubManagementPage: React.FC = () => {
   };
 
   const handleRemovePlayer = async (userId: string) => {
-    if (!club) return;
+    if (!club || !currentState) return;
 
     if (!confirm("Are you sure you want to remove this player from the roster?")) {
       return;
     }
 
     try {
-      await removePlayerFromRoster(club.id, userId);
+      await removePlayerFromRoster(club.id, userId, currentState.id);
 
       // Reload club data
-      const updatedClub = await getClub(club.id);
+      const updatedClub = await getClub(club.id, currentState.id);
       if (updatedClub) {
         setClub(updatedClub);
       }
@@ -334,7 +342,7 @@ const ClubManagementPage: React.FC = () => {
 
   // Phase 4.3: Handle approve transfer request
   const handleApproveRequest = async (request: TransferRequest & { player?: User }) => {
-    if (!currentUser || !club || !request.player) return;
+    if (!currentUser || !club || !currentState || !request.player) return;
 
     if (!approvalPosition.trim()) {
       window.toast?.error("Please enter a position");
@@ -343,7 +351,7 @@ const ClubManagementPage: React.FC = () => {
 
     try {
       setApprovingRequest(request.id);
-      await approveTransferRequest(request.id, currentUser.id, {
+      await approveTransferRequest(request.id, currentUser.id, currentState.id, {
         position: approvalPosition.trim(),
         jerseyNumber: approvalJerseyNumber.trim()
           ? parseInt(approvalJerseyNumber)
@@ -353,7 +361,7 @@ const ClubManagementPage: React.FC = () => {
       window.toast?.success(`${request.player.name} has been added to the roster!`);
       
       // Reload club and transfer requests
-      const updatedClub = await getClub(club.id);
+      const updatedClub = await getClub(club.id, currentState.id);
       if (updatedClub) {
         setClub(updatedClub);
       }
@@ -375,11 +383,11 @@ const ClubManagementPage: React.FC = () => {
 
   // Phase 4.3: Handle reject transfer request
   const handleRejectRequest = async (request: TransferRequest) => {
-    if (!currentUser || !club) return;
+    if (!currentUser || !club || !currentState) return;
 
     try {
       setRejectingRequest(request.id);
-      await rejectTransferRequest(request.id, currentUser.id, rejectionReason.trim() || undefined);
+      await rejectTransferRequest(request.id, currentUser.id, currentState.id, rejectionReason.trim() || undefined);
 
       window.toast?.success("Request rejected");
       

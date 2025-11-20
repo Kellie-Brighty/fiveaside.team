@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   getClientBookings,
   getServiceBooking,
@@ -12,6 +13,7 @@ import type { ServiceBooking, ServiceProvider, Service } from "../types";
 
 const ServiceBookingsPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const { bookingId } = useParams<{ bookingId?: string }>();
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
   const [selectedBooking, setSelectedBooking] = useState<ServiceBooking | null>(null);
@@ -25,21 +27,27 @@ const ServiceBookingsPage: React.FC = () => {
   const [submittingReview, setSubmittingReview] = useState(false);
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && currentState) {
       if (bookingId) {
         loadSingleBooking(bookingId);
       } else {
         loadBookings();
       }
     }
-  }, [currentUser, bookingId, statusFilter]);
+  }, [currentUser, bookingId, statusFilter, currentState?.id]);
 
   const loadBookings = async () => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       if (currentUser?.id) {
         const clientBookings = await getClientBookings(
           currentUser.id,
+          currentState.id,
           statusFilter !== "all" ? statusFilter : undefined
         );
         setBookings(clientBookings);
@@ -53,13 +61,18 @@ const ServiceBookingsPage: React.FC = () => {
   };
 
   const loadSingleBooking = async (id: string) => {
+    if (!currentState) {
+      window.toast?.error("State not available");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const booking = await getServiceBooking(id);
+      const booking = await getServiceBooking(id, currentState.id);
       if (booking) {
         setSelectedBooking(booking);
         // Load provider and service
-        const providerData = await getServiceProvider(booking.serviceProviderId);
+        const providerData = await getServiceProvider(booking.serviceProviderId, currentState.id);
         if (providerData) {
           setProvider(providerData);
           const serviceData = providerData.services?.find((s) => s.id === booking.serviceId);
@@ -79,7 +92,7 @@ const ServiceBookingsPage: React.FC = () => {
   };
 
   const handleSubmitReview = async () => {
-    if (!selectedBooking) return;
+    if (!selectedBooking || !currentState) return;
 
     if (!reviewText.trim()) {
       window.toast?.error("Please write a review");
@@ -88,7 +101,7 @@ const ServiceBookingsPage: React.FC = () => {
 
     try {
       setSubmittingReview(true);
-      await addBookingReview(selectedBooking.id, reviewRating, reviewText.trim());
+      await addBookingReview(selectedBooking.id, reviewRating, reviewText.trim(), currentState.id);
       window.toast?.success("Review submitted successfully!");
       setShowReviewModal(false);
       setReviewRating(5);

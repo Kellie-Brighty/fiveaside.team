@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { getLeague, registerClubForLeague } from "../services/leagueService";
 import { getClub, getClubsByManager } from "../services/clubService";
 import { hasPermission } from "../utils/permissions";
@@ -11,6 +12,7 @@ import type { League, Club } from "../types";
 const LeagueViewPage: React.FC = () => {
   const { leagueId } = useParams<{ leagueId: string }>();
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [league, setLeague] = useState<League | null>(null);
@@ -22,10 +24,10 @@ const LeagueViewPage: React.FC = () => {
   const [showRegistrationModal, setShowRegistrationModal] = useState(false);
 
   useEffect(() => {
-    if (leagueId) {
+    if (leagueId && currentState) {
       loadLeague();
     }
-  }, [leagueId]);
+  }, [leagueId, currentState?.id]);
 
   useEffect(() => {
     if (currentUser && league) {
@@ -34,11 +36,17 @@ const LeagueViewPage: React.FC = () => {
   }, [currentUser, league]);
 
   const loadLeague = async () => {
+    if (!currentState) {
+      setError("State not available");
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const leagueData = await getLeague(leagueId!);
+      const leagueData = await getLeague(leagueId!, currentState.id);
       if (!leagueData) {
         setError("League not found");
         return;
@@ -49,7 +57,7 @@ const LeagueViewPage: React.FC = () => {
       // Load club details for standings and roster
       const allClubIds =
         leagueData.divisions?.flatMap((div) => div.clubIds) || [];
-      const clubPromises = allClubIds.map((clubId) => getClub(clubId));
+      const clubPromises = allClubIds.map((clubId) => getClub(clubId, currentState.id));
       const clubData = await Promise.all(clubPromises);
       setClubs(clubData);
     } catch (error) {
@@ -61,10 +69,10 @@ const LeagueViewPage: React.FC = () => {
   };
 
   const loadUserClubs = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) return;
 
     try {
-      const clubs = await getClubsByManager(currentUser.id);
+      const clubs = await getClubsByManager(currentUser.id, currentState.id);
       setUserClubs(clubs);
     } catch (error) {
       console.error("Error loading user clubs:", error);
@@ -72,11 +80,11 @@ const LeagueViewPage: React.FC = () => {
   };
 
   const handleRegisterClub = async (clubId: string) => {
-    if (!leagueId) return;
+    if (!leagueId || !currentState) return;
 
     try {
       setRegisteringClub(clubId);
-      await registerClubForLeague(leagueId, clubId);
+      await registerClubForLeague(leagueId, clubId, currentState.id);
       window.toast?.success("Club registered successfully!");
       await loadLeague();
       await loadUserClubs();

@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import {
   createProduct,
   getAllProducts,
@@ -15,6 +16,7 @@ import type { Product, ProductVariation } from "../types";
 
 const ProductManagementPage: React.FC = () => {
   const { currentUser } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -60,11 +62,14 @@ const ProductManagementPage: React.FC = () => {
       return;
     }
 
-    loadProducts();
-    loadManagedClubs();
-  }, [currentUser, navigate]);
+    if (currentState) {
+      loadProducts();
+      loadManagedClubs();
+    }
+  }, [currentUser, navigate, currentState?.id]);
 
   const loadProducts = async () => {
+    if (!currentState) return;
     try {
       setLoading(true);
       const filters: any = {};
@@ -72,7 +77,7 @@ const ProductManagementPage: React.FC = () => {
       if (currentUser?.role === "club_manager" || currentUser?.role === "service_provider") {
         filters.sellerId = currentUser.id;
       }
-      const allProducts = await getAllProducts(filters);
+      const allProducts = await getAllProducts(currentState.id, filters);
       setProducts(allProducts);
     } catch (error) {
       console.error("Error loading products:", error);
@@ -83,10 +88,10 @@ const ProductManagementPage: React.FC = () => {
   };
 
   const loadManagedClubs = async () => {
-    if (currentUser?.role === "club_manager" && currentUser.id) {
+    if (currentUser?.role === "club_manager" && currentUser.id && currentState) {
       try {
         // Get clubs where this user is the manager
-        const managed = await getClubsByManager(currentUser.id);
+        const managed = await getClubsByManager(currentUser.id, currentState.id);
         setManagedClubs(managed);
       } catch (error) {
         console.error("Error loading managed clubs:", error);
@@ -115,6 +120,12 @@ const ProductManagementPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
+    
     setSubmitting(true);
 
     try {
@@ -169,10 +180,10 @@ const ProductManagementPage: React.FC = () => {
       });
 
       if (editingProduct) {
-        await updateProduct(editingProduct.id, productData);
+        await updateProduct(editingProduct.id, productData, currentState.id);
         window.toast?.success("Product updated successfully!");
       } else {
-        await createProduct(productData);
+        await createProduct(productData, currentState.id);
         window.toast?.success("Product created successfully!");
       }
 
@@ -229,9 +240,14 @@ const ProductManagementPage: React.FC = () => {
       return;
     }
 
+    if (!currentState) {
+      window.toast?.error("State not available");
+      return;
+    }
+
     try {
       setDeletingProductId(productId);
-      await deleteProduct(productId);
+      await deleteProduct(productId, currentState.id);
       window.toast?.success("Product deleted successfully!");
       await loadProducts();
     } catch (error: any) {

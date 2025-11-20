@@ -2,9 +2,12 @@ import React, { useState, useEffect, useRef } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useCart } from "../contexts/CartContext"; // Phase 8
+import { useStateContext } from "../contexts/StateContext"; // Multi-state support
 import LogoutConfirmModal from "./LogoutConfirmModal";
+import Footer from "./Footer";
+
 import { getRoleDisplayName } from "../utils/permissions"; // Phase 4: Import role display name
-import shortLogo from "../assets/short-logo.png";
+import shortLogo from "../assets/short-logo.png"; // MonkeyPost logo
 
 // Phase 3: Navigation item type definition
 interface NavItem {
@@ -148,6 +151,7 @@ const Layout: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { getCartItemCount } = useCart(); // Phase 8
+  const { currentState } = useStateContext(); // Multi-state support
   const {
     currentUser,
     isAuthenticated,
@@ -189,11 +193,12 @@ const Layout: React.FC = () => {
       if (
         currentUser &&
         (currentUser.role === "club_manager" || currentUser.role === "admin") &&
-        isAuthenticated
+        isAuthenticated &&
+        currentState
       ) {
         try {
           const { getClubsByManager } = await import("../services/clubService");
-          const clubs = await getClubsByManager(currentUser.id);
+          const clubs = await getClubsByManager(currentUser.id, currentState.id);
           setHasClubs(clubs.length > 0);
         } catch (error) {
           console.error("Error checking clubs:", error);
@@ -204,10 +209,10 @@ const Layout: React.FC = () => {
       }
     };
 
-    if (isAuthenticated && currentUser) {
+    if (isAuthenticated && currentUser && currentState) {
       checkClubs();
     }
-  }, [currentUser, isAuthenticated]);
+  }, [currentUser, isAuthenticated, currentState?.id]);
 
   // Check if the current path matches the link path
   const isActive = (path: string) => {
@@ -1152,9 +1157,11 @@ const Layout: React.FC = () => {
       >
         {/* Desktop navigation - hidden on small screens */}
         <div className="container mx-auto justify-between items-center py-4 px-6 hidden md:flex">
-          <Link to="/" className="flex items-center">
-            <img src={shortLogo} alt="MonkeyPost" className="h-16 w-auto" />
-          </Link>
+          <div className="flex items-center gap-4">
+            <Link to="/" className="flex items-center">
+              <img src={shortLogo} alt="MonkeyPost" className="h-16 w-auto rounded-lg" />
+            </Link>
+          </div>
           <nav className="flex items-center">
             <ul className="flex space-x-4 mr-4">
               {nestedNavItems.map((item, index) => {
@@ -1342,9 +1349,11 @@ const Layout: React.FC = () => {
             zIndex: 40,
           }}
         >
-          <Link to="/" className="flex items-center">
-            <img src={shortLogo} alt="MonkeyPost" className="h-12 w-auto" />
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/" className="flex items-center">
+              <img src={shortLogo} alt="MonkeyPost" className="h-10 w-auto rounded-lg" />
+            </Link>
+          </div>
           {isAuthenticated && (
             <div className="flex items-center gap-2">
               {/* Phase 8: Cart Icon - Mobile */}
@@ -1417,6 +1426,9 @@ const Layout: React.FC = () => {
       >
         <Outlet />
       </main>
+
+      {/* Footer */}
+      <Footer />
 
       {/* Mobile navigation bar - Phase 3: Primary items only */}
       <nav

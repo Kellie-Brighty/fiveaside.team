@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useStateContext } from "../contexts/StateContext";
 import { searchPlayerProfiles } from "../services/playerProfileService";
 import {
   addToWatchlist,
@@ -18,6 +19,7 @@ import type { User } from "../types";
 
 const TalentPoolPage: React.FC = () => {
   const { currentUser, isAuthenticated, isLoading } = useAuth();
+  const { currentState } = useStateContext();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [searching, setSearching] = useState(false);
@@ -76,23 +78,26 @@ const TalentPoolPage: React.FC = () => {
   }, [currentUser, players]);
 
   const loadPlayers = async () => {
-    if (!currentUser) return;
+    if (!currentUser || !currentState) {
+      if (!currentState) {
+        setError("State not available");
+      }
+      return;
+    }
 
     try {
       setSearching(true);
       setError(null);
 
       // Build filters
-      const filters: Parameters<typeof searchPlayerProfiles>[0] = {
+      const filters: Parameters<typeof searchPlayerProfiles>[1] = {
         isPublic: true, // Only show public profiles
       };
 
       if (positionFilter) {
         filters.position = positionFilter;
       }
-      if (stateFilter) {
-        filters.state = stateFilter;
-      }
+      // Note: stateFilter is not supported by searchPlayerProfiles, only city is supported
       if (cityFilter) {
         filters.city = cityFilter;
       }
@@ -111,7 +116,7 @@ const TalentPoolPage: React.FC = () => {
       setSearchParams(params);
 
       // Search for public player profiles
-      const profiles = await searchPlayerProfiles(filters);
+      const profiles = await searchPlayerProfiles(currentState.id, filters);
 
       // Load user data for each profile
       const playersWithUsers = await Promise.all(
@@ -154,7 +159,14 @@ const TalentPoolPage: React.FC = () => {
           (p) => p.user.location?.city?.toLowerCase().includes(cityFilter.toLowerCase())
         );
       }
+      // Filter by state (client-side - user's physical location state)
+      if (stateFilter) {
+        filteredPlayers = filteredPlayers.filter(
+          (p) => p.user.location?.state?.toLowerCase().includes(stateFilter.toLowerCase())
+        );
+      }
 
+      console.log(`Loaded ${profiles.length} profiles, ${filteredPlayers.length} after filtering`);
       setPlayers(filteredPlayers);
     } catch (error) {
       console.error("Error loading players:", error);
@@ -220,7 +232,7 @@ const TalentPoolPage: React.FC = () => {
         minGoals: minGoalsFilter ? parseInt(minGoalsFilter) : undefined,
         minAssists: minAssistsFilter ? parseInt(minAssistsFilter) : undefined,
         minMatches: minMatchesFilter ? parseInt(minMatchesFilter) : undefined,
-      });
+      }, currentState?.id || "");
       setShowSaveSearchModal(false);
       setSaveSearchName("");
       if (window.toast) {
